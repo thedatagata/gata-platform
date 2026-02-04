@@ -21,3 +21,4 @@ packages
 dbt_packages
 target
 .user.yml
+data/
