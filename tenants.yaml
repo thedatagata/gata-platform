@@ -1,0 +1,116 @@
+tenants:
+  - slug: tyrell_corp
+    business_name: "Tyrell Corporation"
+    status: active
+    sources:
+      facebook_ads:
+        enabled: true
+        generation:
+          daily_spend_mean: 3000.0
+          campaign_count: 5
+        tables:
+          - raw_tyrell_corp_facebook_ads_ads
+          - raw_tyrell_corp_facebook_ads_ad_sets
+          - raw_tyrell_corp_facebook_ads_campaigns
+          - raw_tyrell_corp_facebook_ads_facebook_insights
+        logic:
+          conversion_event_pattern: ""
+      google_ads:
+        enabled: true
+        generation:
+          daily_spend_mean: 5000.0
+          cpc_mean: 2.10
+          campaign_count: 5
+        tables:
+          - raw_tyrell_corp_google_ads_ads
+          - raw_tyrell_corp_google_ads_ad_groups
+          - raw_tyrell_corp_google_ads_ad_performance
+          - raw_tyrell_corp_google_ads_campaigns
+          - raw_tyrell_corp_google_ads_customers
+        logic: {}
+      instagram_ads:
+        enabled: true
+        generation:
+          daily_spend_mean: 2000.0
+          campaign_count: 5
+        tables:
+          - raw_tyrell_corp_instagram_ads_ads
+          - raw_tyrell_corp_instagram_ads_ad_sets
+          - raw_tyrell_corp_instagram_ads_campaigns
+          - raw_tyrell_corp_instagram_ads_facebook_insights
+        logic:
+          conversion_event_pattern: ""
+      stripe:
+        enabled: true
+        generation:
+          daily_orders_mean: 40
+          aov_mean: 120.00
+        tables:
+          - raw_tyrell_corp_stripe_charges
+        logic: {}
+      shopify:
+        enabled: true
+        generation:
+          product_count: 20
+        tables:
+          - raw_tyrell_corp_shopify_orders
+          - raw_tyrell_corp_shopify_products
+        logic: {}
+      google_analytics:
+        enabled: true
+        generation:
+          organic_traffic_ratio: 0.3
+          conversion_rate: 0.02
+        tables:
+          - raw_tyrell_corp_google_analytics_events
+        logic:
+          conversion_events:
+            - purchase
+          funnel_events:
+            session_start_step: session_start
+            view_item_step: view_item
+            add_to_cart_step: add_to_cart
+            begin_checkout_step: begin_checkout
+            purchase_step: purchase
+
+  - slug: wayne_enterprises
+    business_name: "Wayne Enterprises"
+    status: active
+    sources:
+      google_ads:
+        enabled: true
+        generation:
+          daily_spend_mean: 8000.0
+          cpc_mean: 3.50
+          campaign_count: 3
+        tables:
+          - raw_wayne_enterprises_google_ads_ads
+          - raw_wayne_enterprises_google_ads_ad_groups
+          - raw_wayne_enterprises_google_ads_ad_performance
+          - raw_wayne_enterprises_google_ads_campaigns
+          - raw_wayne_enterprises_google_ads_customers
+        logic: {}
+      google_analytics:
+        enabled: true
+        generation:
+          organic_traffic_ratio: 0.45
+          conversion_rate: 0.03
+        tables:
+          - raw_wayne_enterprises_google_analytics_events
+        logic:
+          conversion_events:
+            - purchase
+            - generate_lead
+          funnel_events:
+            session_start_step: session_start
+            view_item_step: view_item
+            generate_lead_step: generate_lead
+      shopify:
+        enabled: true
+        generation:
+          product_count: 5
+          daily_orders_mean: 10.0
+        tables:
+          - raw_wayne_enterprises_shopify_orders
+          - raw_wayne_enterprises_shopify_products
+        logic: {}

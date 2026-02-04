@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: dasgata
+    env: docker
+    plan: free
+    region: oregon
+    branch: master
+    healthCheckPath: /health
+    envVars:
+      - key: DENO_ENV
+        value: production
+      - key: LAUNCHDARKLY_SDK_KEY
+        sync: false
+      - key: LAUNCHDARKLY_CLIENT_ID
+        sync: false
+      - key: MOTHERDUCK_TOKEN
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+    autoDeploy: false # We trigger this via GitHub Actions for better control

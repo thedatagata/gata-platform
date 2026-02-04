@@ -1,0 +1,61 @@
+# .github/workflows/rollback.yml
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      flag_key:
+        description: 'Flag to rollback'
+        required: true
+        type: choice
+        options:
+          - ai-query-provider
+          - pivot-table-access
+          - data-materialization
+          - webllm-access
+          - ai-config
+      environment:
+        description: 'Environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      reason:
+        description: 'Rollback reason'
+        required: true
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disable flag
+        run: |
+          curl -X PATCH \
+            "https://app.launchdarkly.com/api/v2/flags/thedenogatar/${{ inputs.flag_key }}" \
+            -H "Authorization: ${{ secrets.LAUNCHDARKLY_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "environmentKey": "${{ inputs.environment }}",
+              "instructions": [{
+                "kind": "turnFlagOff"
+              }]
+            }'
+
+      - name: Create rollback event
+        run: |
+          curl -X POST \
+            "https://app.launchdarkly.com/api/v2/flags/thedenogatar/${{ inputs.flag_key }}/environments/${{ inputs.environment }}/approval-requests" \
+            -H "Authorization: ${{ secrets.LAUNCHDARKLY_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "description": "Emergency rollback via GitHub Actions",
+              "comment": "${{ inputs.reason }}",
+              "notifyMemberIds": []
+            }'
+
+      - name: Notify team
+        run: |
+          echo "🚨 ROLLBACK: Flag ${{ inputs.flag_key }} disabled in ${{ inputs.environment }}"
+          echo "Reason: ${{ inputs.reason }}"
+          echo "Time: $(date -u)"

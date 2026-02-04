@@ -1,0 +1,79 @@
+version: 2
+sources:
+- name: tyrell_corp_instagram_ads_raw
+  schema: instagram_ads
+  tables:
+  - name: raw_tyrell_corp_instagram_ads_ads
+    description: Raw ads data for tyrell_corp
+    columns:
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: adset_id
+      description: 'Type: VARCHAR'
+    - name: campaign_id
+      description: 'Type: VARCHAR'
+    - name: name
+      description: 'Type: VARCHAR'
+    - name: creative_id
+      description: 'Type: VARCHAR'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_instagram_ads_ad_sets
+    description: Raw ad_sets data for tyrell_corp
+    columns:
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: campaign_id
+      description: 'Type: VARCHAR'
+    - name: name
+      description: 'Type: VARCHAR'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: daily_budget
+      description: 'Type: DOUBLE'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_instagram_ads_campaigns
+    description: Raw campaigns data for tyrell_corp
+    columns:
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: name
+      description: 'Type: VARCHAR'
+    - name: objective
+      description: 'Type: VARCHAR'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_instagram_ads_facebook_insights
+    description: Raw facebook_insights data for tyrell_corp
+    columns:
+    - name: ad_id
+      description: 'Type: VARCHAR'
+    - name: campaign_id
+      description: 'Type: VARCHAR'
+    - name: adset_id
+      description: 'Type: VARCHAR'
+    - name: date_start
+      description: 'Type: DATE'
+    - name: spend
+      description: 'Type: DOUBLE'
+    - name: impressions
+      description: 'Type: BIGINT'
+    - name: clicks
+      description: 'Type: BIGINT'
+    - name: conversions
+      description: 'Type: BIGINT'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'

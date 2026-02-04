@@ -1,0 +1,36 @@
+version: 2
+sources:
+- name: tyrell_corp_google_analytics_raw
+  schema: google_analytics
+  tables:
+  - name: raw_tyrell_corp_google_analytics_events
+    description: Raw events data for tyrell_corp
+    columns:
+    - name: event_name
+      description: 'Type: VARCHAR'
+    - name: event_date
+      description: 'Type: VARCHAR'
+    - name: event_timestamp
+      description: 'Type: BIGINT'
+    - name: user_pseudo_id
+      description: 'Type: VARCHAR'
+    - name: traffic_source__source
+      description: 'Type: VARCHAR'
+    - name: traffic_source__medium
+      description: 'Type: VARCHAR'
+    - name: traffic_source__campaign
+      description: 'Type: VARCHAR'
+    - name: geo__country
+      description: 'Type: VARCHAR'
+    - name: geo__city
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+    - name: ecommerce__transaction_id
+      description: 'Type: VARCHAR'
+    - name: ecommerce__value
+      description: 'Type: DOUBLE'
+    - name: ecommerce__currency
+      description: 'Type: VARCHAR'

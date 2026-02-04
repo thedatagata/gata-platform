@@ -1,0 +1,36 @@
+version: 2
+sources:
+- name: tyrell_corp_stripe_raw
+  schema: stripe
+  tables:
+  - name: raw_tyrell_corp_stripe_charges
+    description: Raw charges data for tyrell_corp
+    columns:
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: amount
+      description: 'Type: BIGINT'
+    - name: amount_captured
+      description: 'Type: BIGINT'
+    - name: amount_refunded
+      description: 'Type: BIGINT'
+    - name: currency
+      description: 'Type: VARCHAR'
+    - name: created
+      description: 'Type: TIMESTAMP WITH TIME ZONE'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: paid
+      description: 'Type: BOOLEAN'
+    - name: refunded
+      description: 'Type: BOOLEAN'
+    - name: payment_method_details__type
+      description: 'Type: VARCHAR'
+    - name: payment_method_details__card__brand
+      description: 'Type: VARCHAR'
+    - name: payment_method_details__card__last4
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'

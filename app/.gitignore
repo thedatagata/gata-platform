@@ -1,0 +1,91 @@
+# Environment variables
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+.env*.local
+.agent
+.data
+
+# Deno
+.deno/
+deno.lock
+
+# Fresh build directory
+_fresh/
+dist/
+build/
+
+# Node modules (will be installed during deployment)
+node_modules/
+
+# Database files (managed separately in production)
+contact.db
+contact.db-journal
+*.db
+*.db-journal
+data.kv-shm
+data.kv-wal
+db/data.kv
+*.kv
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+ehthumbs.db
+ehthumbs_vista.db
+
+# Temporary files
+*.swp
+*.swo
+*~
+*.tmp
+tmp/
+temp/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.fleet/
+*.iml
+.project
+.classpath
+.settings/
+.factorypath
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Debug
+.pnp.*
+.yarn/
+
+# LaunchDarkly local data
+.launchdarkly/local.json
+
+# Misc
+.cache/
+
+IMPLEMENTATION_PLAN.md

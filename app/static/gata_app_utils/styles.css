@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Smooth transition for scroll-to-top button */
+#scrollToTop {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+#scrollToTop.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#scrollToTop.hidden {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+/* Make scroll offset for section anchors to account for fixed header */
+section[id] {
+  scroll-margin-top: 100px;
+}
+
+/* Add some fun animations */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #172217;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #90C137;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7dab2a;
+}

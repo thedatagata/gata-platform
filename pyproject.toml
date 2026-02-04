@@ -1,0 +1,22 @@
+[project]
+name = "gata-platform"
+version = "0.1.0"
+description = "The Gata Data Platform Monorepo"
+requires-python = ">=3.11"
+dependencies = [
+    "dbt-core>=1.11.2",
+    "dbt-duckdb>=1.8.0",
+    "dlt>=0.4.0",
+    "duckdb>=1.0.0",
+    "faker>=24.0.0",
+    "fastapi>=0.110.0",
+    "numpy>=2.4.2",
+    "polars>=1.0.0",  # Using Polars
+    "pyarrow>=16.0.0", # Required for efficient Polars <-> dlt exchange
+    "pydantic>=2.7.0",
+    "python-dateutil>=2.9.0.post0",
+    "uvicorn>=0.29.0",
+]
+
+[tool.uv.workspace]
+members = ["services/*", "warehouse"]

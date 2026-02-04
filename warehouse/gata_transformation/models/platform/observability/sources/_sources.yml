@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: dbt_artifacts
+    # Dynamically point to the project and dataset of your active target
+    database: "{{ target.database }}"
+    schema: "{{ target.schema }}"
+    tables:
+      - name: run_results__current
+        config:
+          loaded_at_field: extracted_at
+      - name: model_artifacts__current
+        config:
+          loaded_at_field: extracted_at
+      - name: test_artifacts__current
+        config:
+          loaded_at_field: extracted_at

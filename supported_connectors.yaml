@@ -1,0 +1,63 @@
+connectors:
+  - name: linkedin_ads
+    version: v202401
+    master_model_id: linkedin_ads_api_v1
+    objects:
+      - campaigns
+      - ad_analytics_by_campaign
+  - name: bing_ads
+    version: v13
+    master_model_id: bing_ads_api_v1
+    objects:
+      - campaigns
+      - ad_groups
+      - ads
+      - account_performance_report
+  - name: amazon_ads
+    version: v3
+    master_model_id: amazon_ads_api_v1
+    objects:
+      - sponsored_products_campaigns
+      - sponsored_products_ad_groups
+      - sponsored_products_product_ads
+  - name: amplitude
+    version: v2
+    master_model_id: amplitude_api_v1
+    objects:
+      - events
+      - users
+  - name: mixpanel
+    version: v2
+    master_model_id: mixpanel_api_v1
+    objects:
+      - events
+      - people
+  - name: woocommerce
+    version: v3
+    master_model_id: woocommerce_api_v1
+    objects:
+      - orders
+      - products
+  - name: bigcommerce
+    version: v3
+    master_model_id: bigcommerce_api_v1
+    objects:
+      - orders
+      - products
+  - name: facebook_ads
+    version: v19
+    master_model_id: facebook_ads_api_v1
+    objects:
+      - ads
+      - ad_sets
+      - campaigns
+      - facebook_insights
+  - name: google_ads
+    version: v16
+    master_model_id: google_ads_api_v1
+    objects:
+      - ads
+      - ad_groups
+      - ad_performance
+      - campaigns
+      - customers

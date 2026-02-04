@@ -1,0 +1,20 @@
+[project]
+name = "mock-data-engine"
+version = "0.1.0"
+description = "Synthetic data generator for Gata Platform"
+requires-python = ">=3.11"
+dependencies = [
+    "dlt[duckdb,motherduck]>=0.4.0",
+    "faker>=24.0.0",
+    "polars>=1.0.0",
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0.0",
+    "numpy>=1.26.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sources"]

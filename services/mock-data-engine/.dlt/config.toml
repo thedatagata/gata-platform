@@ -1,0 +1,19 @@
+# ------------------------------------------------------------------------------
+# 1. Load Stage Optimizations
+# ------------------------------------------------------------------------------
+[load]
+# Increase parallel worker threads for faster loading to MotherDuck.
+# Default is often 20, but for local scripts, setting this ensures 
+# we explicitly control the concurrency.
+workers = 5
+
+# Helps debug if dlt cannot find a credential key during runs.
+print_key_missing = true
+
+# ------------------------------------------------------------------------------
+# 2. Buffer & File Optimizations (Optional but recommended)
+# ------------------------------------------------------------------------------
+# Controls how many items are held in memory before flushing to disk.
+# Increasing this slightly can speed up the 'extract' phase for local processing.
+[data_writer]
+buffer_max_items = 5000

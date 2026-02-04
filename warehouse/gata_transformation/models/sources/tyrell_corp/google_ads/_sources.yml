@@ -1,0 +1,100 @@
+version: 2
+sources:
+- name: tyrell_corp_google_ads_raw
+  schema: google_ads
+  tables:
+  - name: raw_tyrell_corp_google_ads_ads
+    description: Raw ads data for tyrell_corp
+    columns:
+    - name: resource_name
+      description: 'Type: VARCHAR'
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: ad_group_id
+      description: 'Type: VARCHAR'
+    - name: name
+      description: 'Type: VARCHAR'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_google_ads_ad_groups
+    description: Raw ad_groups data for tyrell_corp
+    columns:
+    - name: resource_name
+      description: 'Type: VARCHAR'
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: campaign_id
+      description: 'Type: VARCHAR'
+    - name: name
+      description: 'Type: VARCHAR'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: type
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_google_ads_ad_performance
+    description: Raw ad_performance data for tyrell_corp
+    columns:
+    - name: ad_id
+      description: 'Type: VARCHAR'
+    - name: ad_group_id
+      description: 'Type: VARCHAR'
+    - name: campaign_id
+      description: 'Type: VARCHAR'
+    - name: date
+      description: 'Type: DATE'
+    - name: customer_id
+      description: 'Type: VARCHAR'
+    - name: cost_micros
+      description: 'Type: BIGINT'
+    - name: impressions
+      description: 'Type: BIGINT'
+    - name: clicks
+      description: 'Type: BIGINT'
+    - name: conversions
+      description: 'Type: BIGINT'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_google_ads_campaigns
+    description: Raw campaigns data for tyrell_corp
+    columns:
+    - name: resource_name
+      description: 'Type: VARCHAR'
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: name
+      description: 'Type: VARCHAR'
+    - name: status
+      description: 'Type: VARCHAR'
+    - name: advertising_channel_type
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_google_ads_customers
+    description: Raw customers data for tyrell_corp
+    columns:
+    - name: resource_name
+      description: 'Type: VARCHAR'
+    - name: id
+      description: 'Type: VARCHAR'
+    - name: descriptive_name
+      description: 'Type: VARCHAR'
+    - name: currency_code
+      description: 'Type: VARCHAR'
+    - name: time_zone
+      description: 'Type: VARCHAR'
+    - name: _dlt_load_id
+      description: 'Type: VARCHAR'
+    - name: _dlt_id
+      description: 'Type: VARCHAR'

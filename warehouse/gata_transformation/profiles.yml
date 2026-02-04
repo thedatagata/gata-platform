@@ -1,0 +1,13 @@
+swamp-duck:
+  target: sandbox
+  outputs:
+    sandbox:
+      type: duckdb
+      path: "C:/Users/yalel/OneDrive/Desktop/swamp_life/gata-platform/warehouse/sandbox.duckdb"
+      threads: 1
+
+    dev:
+      type: duckdb
+      path: "md:my_db"
+      token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
+      threads: 1

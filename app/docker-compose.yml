@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # LaunchDarkly
+      - LAUNCHDARKLY_SDK_KEY=${LAUNCHDARKLY_SDK_KEY:-}
+
+      # OAuth Configuration
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+
+      # MotherDuck Configuration
+      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN:-}
+
+      # Session Configuration
+      - SESSION_SECRET=${SESSION_SECRET:-supersecuresecretstring}
+
+      # Admin Configuration
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+
+      # Environment
+      - DENO_ENV=${DENO_ENV:-development}
+      - GIT_SHA=${GIT_SHA:-local}
+
+      # Port Configuration
+      - PORT=8000
+    volumes:
+      # Mount source code for development hot reload
+      - .:/app
+      # Prevent overwriting node_modules and build artifacts
+      - /app/node_modules
+      - /app/_fresh
+      # Persist KV database
+      - kv-data:/app/db
+    command: deno task start
+    healthcheck:
+      test: ["CMD-SHELL", "deno eval \"fetch('http://localhost:8000/health').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))\""]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Optional: Add a production profile
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LAUNCHDARKLY_SDK_KEY=${LAUNCHDARKLY_SDK_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - DENO_ENV=production
+      - GIT_SHA=${GIT_SHA:-latest}
+      - PORT=8000
+    volumes:
+      # Only persist KV database in production
+      - kv-data:/app/db
+    healthcheck:
+      test: ["CMD-SHELL", "deno eval \"fetch('http://localhost:8000/health').then(r => r.ok ? Deno.exit(0) : Deno.exit(1))\""]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: always
+    networks:
+      - app-network
+    profiles:
+      - production
+
+volumes:
+  kv-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
