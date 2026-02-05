@@ -64,6 +64,7 @@ final AS (
     {% if has_stripe %}
     LEFT JOIN stripe_charges s 
         ON o.stripe_charge_id = s.charge_id
+        AND o.tenant_slug = s.tenant_slug
     {% endif %}
 )
 
