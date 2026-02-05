@@ -114,3 +114,29 @@ tenants:
           - raw_wayne_enterprises_shopify_orders
           - raw_wayne_enterprises_shopify_products
         logic: {}
+
+  - slug: stark_industries
+    business_name: "Stark Industries"
+    status: onboarding
+    sources:
+      woocommerce:
+        enabled: true
+        generation:
+          daily_orders_mean: 25.0
+          product_count: 50
+        tables: []
+        logic: {}
+      stripe:
+        enabled: true
+        generation:
+          daily_orders_mean: 25.0
+          aov_mean: 150.0
+        tables: []
+        logic: {}
+      linkedin_ads:
+        enabled: true
+        generation:
+          daily_spend_mean: 1500.0
+          campaign_count: 5
+        tables: []
+        logic: {}

@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  app:
+    image: denoland/deno:latest
+    container_name: gata_app
+    working_dir: /app
+    volumes:
+      - ./services/gata-frontend:/app
+      - ./.env:/app/.env
+    command: task start
+    environment:
+      - DENO_ENV=development
+    ports:
+      - "8000:8000"
+    networks:
+      - gata-network
+
+  api:
+    build: ./services/platform-api
+    container_name: gata_api
+    ports:
+      - "8001:8000"
+    volumes:
+      - .:/app
+    environment:
+      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN}
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    networks:
+      - gata-network
+
+  worker:
+    image: python:3.11-slim
+    container_name: gata_worker
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: tail -f /dev/null # Placeholder for manual execution or supervised process
+    env_file:
+      - .env
+    environment:
+      - DLT_PROJECT_DIR=/app/services/mock-data-engine
+    networks:
+      - gata-network
+
+  dashboard:
+    image: rilldata/rill:latest
+    container_name: gata_rill
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./services/rill-dashboard:/project
+    environment:
+      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN}
+    command: start /project --host 0.0.0.0
+    networks:
+      - gata-network
+
+networks:
+  gata-network:
+    driver: bridge

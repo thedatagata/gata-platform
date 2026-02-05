@@ -2,6 +2,9 @@ import dlt
 import argparse
 import sys
 import os
+import duckdb
+import json
+from typing import Dict, Any
 
 # 1. Add the current directory to path so we can import from local modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12,17 +15,18 @@ os.environ["DLT_PROJECT_DIR"] = current_dir
 
 from config import load_manifest
 from orchestrator import MockOrchestrator
+from utils.bsl_mapper import generate_boring_manifest
 
 def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str = None):
     # --- Path Handling ---
     if not os.path.isabs(config_path):
         config_path = os.path.abspath(config_path)
 
-    print(f"📖 Loading Manifest from {config_path}...")
+    print(f"Loading Manifest from {config_path}...")
     try:
         manifest = load_manifest(config_path)
     except Exception as e:
-        print(f"❌ Error loading config: {e}")
+        print(f"Error loading config: {e}")
         return
 
     # Calculate project root
@@ -30,19 +34,34 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
 
     # --- Target Logic ---
     if target == "local":
-        print("🛠️  Target is LOCAL: Overriding generation window to 2 days for sampling.")
+        print("Target is LOCAL: Overriding generation window to 2 days for sampling.")
         effective_days = 2
-        destination = "duckdb"
         
         db_path = os.path.join(project_root, "warehouse", "sandbox.duckdb")
-        os.environ["DESTINATION__DUCKDB__CREDENTIALS"] = db_path
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        # dlt destination config
+        credentials_str = f"duckdb:///{db_path}"
+        os.environ["DESTINATION__DUCKDB__CREDENTIALS"] = credentials_str 
         print(f"    -> Database: {db_path}")
         
-    else:
-        print(f"☁️  Target is {target.upper()}: Generating full {days} days history.")
+        platform_db_conn_str = db_path 
+        
+        # Add duckdb connector for local Rill if needed (optional but good practice)
+        # But instructions only mentioned motherduck.yaml
+
+    else: # dev or prod
+        print(f"Target is {target.upper()}: Generating full {days} days history.")
         effective_days = days
         destination = "motherduck"
-        # Credentials loaded automatically from secrets.toml
+        credentials_str = None 
+        
+        # For metadata insertion:
+        md_token = os.environ.get('MOTHERDUCK_TOKEN')
+        if not md_token:
+            print("⚠️  MOTHERDUCK_TOKEN not found in env. Metadata insertion might fail.")
+            
+        platform_db_conn_str = f"md:my_db?motherduck_token={md_token}" if md_token else "md:my_db"
 
     # --- Execution Loop ---
     for tenant_config in manifest.tenants:
@@ -58,47 +77,80 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
                  print(f"⚠️  Skipping {tenant_slug}: Status is '{tenant_config.status}' (expected 'pending' or 'onboarding').")
             continue
 
-        print(f"🚀 Initializing Generator for {tenant_config.business_name} ({tenant_slug})...")
+        print(f"Initializing Generator for {tenant_config.business_name} ({tenant_slug})...")
 
-        # 1. Run Orchestrator
-        orchestrator = MockOrchestrator(tenant_config, effective_days)
-        data_registry = orchestrator.run()
+        # 1. Run Orchestrator (Data Gen + dlt Load)
+        # Pass credentials string for local duckdb support in dlt
+        orchestrator = MockOrchestrator(tenant_config, effective_days, credentials=credentials_str)
+        try:
+            dlt_schema = orchestrator.run() # Physical load happens here
+            print(f"Data loaded via dlt for {tenant_slug}")
+        except Exception as e:
+            print(f"Error during data generation/loading for {tenant_slug}: {e}")
+            continue
 
-        # 2. Load Data via dlt
-        for source_name, source_data in data_registry.items():
+        # 2. Generate Semantic Layer
+        print("  - Generating BSL Manifest...")
+        try:
+            # Debug: Print schema keys
+            print(f"    DEBUG: dlt_schema type: {type(dlt_schema)}")
+            if isinstance(dlt_schema, dict):
+                print(f"    DEBUG: dlt_schema keys: {dlt_schema.keys()}")
+                print(f"    DEBUG: dlt_schema tables count: {len(dlt_schema.get('tables', {}))}")
             
-            # ------------------------------------------------------------------
-            # ARCHITECTURE FIX 1: Source-Centric Schema
-            # ------------------------------------------------------------------
-            # Instead of "raw_tyrell_corp_facebook_ads", we just use "facebook_ads".
-            # This keeps all tenants for a single source in one clean schema/dataset.
-            dataset_name = source_name
+            # Generate the full manifest (containing "models" list)
+            # This triggers Rill YAML generation as side effect
+            bsl_manifest = generate_boring_manifest(dlt_schema, tenant_slug)
+            print(f"    DEBUG: BSL Manifest models count: {len(bsl_manifest.get('models', []))}")
             
-            print(f"🚚 Loading {source_name} to {destination} ({dataset_name})...")
+        except Exception as e:
+             print(f"❌ Error generating BSL manifest: {e}")
+             import traceback
+             traceback.print_exc()
+             bsl_manifest = {}
+             
+        # 3. Direct Push to Warehouse Satellite
+        print("  - Registering Semantic Manifest in Warehouse...")
+        try:
+            con = duckdb.connect(platform_db_conn_str)
             
-            pipeline = dlt.pipeline(
-                pipeline_name=f"{tenant_slug}_{source_name}",
-                destination=destination,
-                dataset_name=dataset_name
-            )
+            # --- Per-Table Persistence Logic ---
+            # 'dlt_schema' contains 'tables' dictionary. 
+            # 'bsl_manifest' contains 'models' list, mapped from those tables.
             
-            # ------------------------------------------------------------------
-            # ARCHITECTURE FIX 2: Tenant-Specific Table Names
-            # ------------------------------------------------------------------
-            # We explicitly rename the table to include the tenant slug AND source.
-            # Example: 'campaigns' -> 'raw_tyrell_corp_facebook_ads_campaigns'
-            resources = []
-            for original_table_name, data in source_data.items():
+            # Create a lookup for BSL models by name for easy access
+            bsl_lookup = { m['name']: m for m in bsl_manifest.get('models', []) }
+            
+            dlt_tables = dlt_schema.get("tables", {})
+            print(f"    DEBUG: Persisting metadata for {len(dlt_tables)} tables to {platform_db_conn_str}")
+            
+            # Iterate through each table in the physical schema
+            for table_name, table_info in dlt_tables.items():
+                if table_name.startswith("_dlt"): continue
                 
-                # Construct the new unique table name
-                new_table_name = f"raw_{tenant_slug}_{source_name}_{original_table_name}"
+                # Get the corresponding BSL model fragment
+                model_manifest = bsl_lookup.get(table_name, {})
                 
-                resources.append(
-                    dlt.resource(data, name=new_table_name, write_disposition="replace")
-                )
+                # Prepare JSON payloads
+                # source_schema: just the info for this specific table from dlt
+                source_schema_json = json.dumps(table_info)
+                
+                # boring_semantic_manifest: just the BSL model for this specific table
+                bsl_json = json.dumps(model_manifest)
+                
+                # Insert row for this specific table
+                query = """
+                    INSERT INTO main.platform_sat__source_schema_history 
+                    (tenant_slug, source_table_name, source_schema, boring_semantic_manifest, updated_at)
+                    VALUES (?, ?, ?, ?, current_timestamp)
+                """
+                con.execute(query, [tenant_slug, table_name, source_schema_json, bsl_json])
+                
+            con.close()
+            print(f"Warehouse metadata registered for {tenant_slug} (Tables: {len(bsl_lookup)})")
             
-            info = pipeline.run(resources)
-            print(info)
+        except Exception as e:
+            print(f"Error writing metadata to warehouse: {e}")
 
 if __name__ == "__main__":
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))

@@ -12,6 +12,7 @@ resolution-markers = [
 members = [
     "gata-platform",
     "mock-data-engine",
+    "platform-api",
     "warehouse",
 ]
 
@@ -1730,6 +1731,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b8/b0/a36c468d2d0dec62ddea7c5e4177e93abb12f48ac90f09f24d0581c5189f/pendulum-3.2.0-pp311-pypy311_pp73-musllinux_1_1_x86_64.whl", hash = "sha256:5cd956d4176afc7bfe8a91bf3f771b46ff8d326f6c5bf778eb5010eb742ebba6", size = 561884, upload-time = "2026-01-30T11:22:19.671Z" },
     { url = "https://files.pythonhosted.org/packages/c5/4d/dad105261898907bf806cabca53d3878529a9fa2c0d5d7f95f2035246fc2/pendulum-3.2.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:39ef129d7b90aab49708645867abdd207b714ba7bff12dae549975b0aca09716", size = 261236, upload-time = "2026-01-30T11:22:21.059Z" },
     { url = "https://files.pythonhosted.org/packages/02/fb/d65db067a67df7252f18b0cb7420dda84078b9e8bfb375215469c14a50be/pendulum-3.2.0-py3-none-any.whl", hash = "sha256:f3a9c18a89b4d9ef39c5fa6a78722aaff8d5be2597c129a3b16b9f40a561acf3", size = 114111, upload-time = "2026-01-30T11:22:22.361Z" },
+]
+
+[[package]]
+name = "platform-api"
+version = "0.1.0"
+source = { virtual = "services/platform-api" }
+dependencies = [
+    { name = "duckdb" },
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb" },
+    { name = "fastapi" },
+    { name = "uvicorn" },
 ]
 
 [[package]]
