@@ -1,0 +1,26 @@
+dimensions:
+- column: resource_name
+  label: Resource_Name
+  name: resource_name
+- column: id
+  label: Id
+  name: id
+- column: ad_group_id
+  label: Ad_Group_Id
+  name: ad_group_id
+- column: name
+  label: Name
+  name: name
+- column: status
+  label: Status
+  name: status
+- column: _dlt_load_id
+  label: _Dlt_Load_Id
+  name: _dlt_load_id
+- column: _dlt_id
+  label: _Dlt_Id
+  name: _dlt_id
+measures: []
+model: raw_tyrell_corp_google_ads_ads
+title: Tyrell_Corp - Tyrell Corp Google Ads Ads
+type: metrics_view

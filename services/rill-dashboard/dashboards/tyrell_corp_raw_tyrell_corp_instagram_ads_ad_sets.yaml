@@ -1,0 +1,26 @@
+dimensions:
+- column: id
+  label: Id
+  name: id
+- column: campaign_id
+  label: Campaign_Id
+  name: campaign_id
+- column: name
+  label: Name
+  name: name
+- column: status
+  label: Status
+  name: status
+- column: _dlt_load_id
+  label: _Dlt_Load_Id
+  name: _dlt_load_id
+- column: _dlt_id
+  label: _Dlt_Id
+  name: _dlt_id
+measures:
+- expression: sum(daily_budget)
+  label: Daily_Budget
+  name: daily_budget
+model: raw_tyrell_corp_instagram_ads_ad_sets
+title: Tyrell_Corp - Tyrell Corp Instagram Ads Ad Sets
+type: metrics_view

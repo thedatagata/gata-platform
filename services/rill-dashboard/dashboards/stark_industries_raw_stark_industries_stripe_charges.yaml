@@ -1,0 +1,47 @@
+dimensions:
+- column: id
+  label: Id
+  name: id
+- column: currency
+  label: Currency
+  name: currency
+- column: created
+  label: Created
+  name: created
+- column: status
+  label: Status
+  name: status
+- column: paid
+  label: Paid
+  name: paid
+- column: refunded
+  label: Refunded
+  name: refunded
+- column: payment_method_details__type
+  label: Payment_Method_Details__Type
+  name: payment_method_details__type
+- column: payment_method_details__card__brand
+  label: Payment_Method_Details__Card__Brand
+  name: payment_method_details__card__brand
+- column: payment_method_details__card__last4
+  label: Payment_Method_Details__Card__Last4
+  name: payment_method_details__card__last4
+- column: _dlt_load_id
+  label: _Dlt_Load_Id
+  name: _dlt_load_id
+- column: _dlt_id
+  label: _Dlt_Id
+  name: _dlt_id
+measures:
+- expression: sum(amount)
+  label: Amount
+  name: amount
+- expression: sum(amount_captured)
+  label: Amount_Captured
+  name: amount_captured
+- expression: sum(amount_refunded)
+  label: Amount_Refunded
+  name: amount_refunded
+model: raw_stark_industries_stripe_charges
+title: Stark_Industries - Stark Industries Stripe Charges
+type: metrics_view

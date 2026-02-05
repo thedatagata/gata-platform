@@ -1,0 +1,23 @@
+dimensions:
+- column: id
+  label: Id
+  name: id
+- column: name
+  label: Name
+  name: name
+- column: objective
+  label: Objective
+  name: objective
+- column: status
+  label: Status
+  name: status
+- column: _dlt_load_id
+  label: _Dlt_Load_Id
+  name: _dlt_load_id
+- column: _dlt_id
+  label: _Dlt_Id
+  name: _dlt_id
+measures: []
+model: raw_tyrell_corp_instagram_ads_campaigns
+title: Tyrell_Corp - Tyrell Corp Instagram Ads Campaigns
+type: metrics_view
