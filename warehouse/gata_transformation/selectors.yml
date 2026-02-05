@@ -1,0 +1,7 @@
+selectors:
+  - name: stark_industries
+    definition:
+      union:
+        - tag: stark_industries
+        - method: fqn
+          value: stark_industries
