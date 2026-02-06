@@ -65,7 +65,8 @@ async def update_logic(tenant_slug: str, platform: str, logic_payload: dict):
         # Assuming dbt is available in the container/environment path
         # Running from project root assumption or adjust cwd
         project_root = Path(__file__).parent.parent.parent
-        subprocess.run(["dbt", "run", "--select", "platform"], check=True, cwd=project_root)
+        dbt_cwd = project_root / "warehouse" / "gata_transformation"
+        subprocess.run(["dbt", "run", "--select", "platform"], check=True, cwd=dbt_cwd)
         return {"status": "success", "message": f"Logic updated for {tenant_slug}"}
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail="dbt execution failed")

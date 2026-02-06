@@ -5,6 +5,7 @@ import os
 import duckdb
 import json
 from typing import Dict, Any
+import subprocess
 
 # 1. Add the current directory to path so we can import from local modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -151,6 +152,15 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
             
         except Exception as e:
             print(f"Error writing metadata to warehouse: {e}")
+
+    # 3. Refresh Warehouse Registry
+    print("  - Refreshing Warehouse Registry via dbt...")
+    dbt_cwd = os.path.join(project_root, "warehouse", "gata_transformation")
+    try:
+        subprocess.run(["dbt", "run", "--select", "platform"], check=True, cwd=dbt_cwd)
+        print("    -> dbt registry refresh successful.")
+    except Exception as e:
+        print(f"    -> dbt registry refresh failed: {e}")
 
 if __name__ == "__main__":
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
