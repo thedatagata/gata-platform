@@ -74,9 +74,12 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
 
         # Status Check
         if tenant_config.status not in ['pending', 'onboarding']:
-            if specific_tenant:
-                 print(f"⚠️  Skipping {tenant_slug}: Status is '{tenant_config.status}' (expected 'pending' or 'onboarding').")
-            continue
+            if specific_tenant and tenant_slug == specific_tenant:
+                print(f"ℹ️  Forcing run for active tenant: {tenant_slug}")
+            else:
+                if specific_tenant:
+                     print(f"⚠️  Skipping {tenant_slug}: Status is '{tenant_config.status}' (expected 'pending' or 'onboarding').")
+                continue
 
         print(f"Initializing Generator for {tenant_config.business_name} ({tenant_slug})...")
 

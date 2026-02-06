@@ -13,6 +13,13 @@
 SELECT
     tenant_slug,
     CAST(raw_data_payload->>'id' AS BIGINT) as order_id,
+    -- Robust search logic: find the value where name is 'stripe_charge_id'
+    (
+        SELECT attr->>'value' 
+        FROM (SELECT unnest(raw_data_payload->'note_attributes') as attr) 
+        WHERE attr->>'name' = 'stripe_charge_id'
+        LIMIT 1
+    ) as stripe_charge_id,
     raw_data_payload->>'name' as order_name,
     CAST(raw_data_payload->>'created_at' AS TIMESTAMP) as order_created_at,
     CAST(raw_data_payload->>'processed_at' AS TIMESTAMP) as order_processed_at,
@@ -22,11 +29,8 @@ SELECT
     raw_data_payload->>'currency' as currency,
     raw_data_payload->>'financial_status' as financial_status,
     raw_data_payload->>'email' as order_email,
-    CAST(raw_data_payload->>'customer__id' AS BIGINT) as customer_id,
-    raw_data_payload->>'customer__email' as customer_email,
-    -- Extract Stripe Charge ID from note_attributes
-    -- JSON path: $.note_attributes[0].value
-    raw_data_payload->'$.note_attributes'->0->>'value' as stripe_charge_id,
+    CAST(raw_data_payload->>'customer'->>'id' AS BIGINT) as customer_id,
+    raw_data_payload->>'customer'->>'email' as customer_email,
     raw_data_payload
 FROM {{ ref('platform_mm__shopify_api_v1_orders') }}
 WHERE tenant_slug = '{{ tenant_slug }}'

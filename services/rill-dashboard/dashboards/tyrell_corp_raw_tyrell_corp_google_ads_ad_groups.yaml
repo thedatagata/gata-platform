@@ -1,22 +1,4 @@
 dimensions:
-- column: resource_name
-  label: Resource_Name
-  name: resource_name
-- column: id
-  label: Id
-  name: id
-- column: campaign_id
-  label: Campaign_Id
-  name: campaign_id
-- column: name
-  label: Name
-  name: name
-- column: status
-  label: Status
-  name: status
-- column: type
-  label: Type
-  name: type
 - column: _dlt_load_id
   label: _Dlt_Load_Id
   name: _dlt_load_id

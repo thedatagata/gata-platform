@@ -9,10 +9,14 @@ tenants:
           daily_spend_mean: 3000.0
           campaign_count: 5
         tables:
-          - raw_tyrell_corp_facebook_ads_ads
-          - raw_tyrell_corp_facebook_ads_ad_sets
-          - raw_tyrell_corp_facebook_ads_campaigns
-          - raw_tyrell_corp_facebook_ads_facebook_insights
+          - name: raw_tyrell_corp_facebook_ads_ads
+            logic: {}
+          - name: raw_tyrell_corp_facebook_ads_ad_sets
+            logic: {}
+          - name: raw_tyrell_corp_facebook_ads_campaigns
+            logic: {}
+          - name: raw_tyrell_corp_facebook_ads_facebook_insights
+            logic: {}
         logic:
           conversion_event_pattern: ""
       google_ads:
@@ -22,11 +26,16 @@ tenants:
           cpc_mean: 2.10
           campaign_count: 5
         tables:
-          - raw_tyrell_corp_google_ads_ads
-          - raw_tyrell_corp_google_ads_ad_groups
-          - raw_tyrell_corp_google_ads_ad_performance
-          - raw_tyrell_corp_google_ads_campaigns
-          - raw_tyrell_corp_google_ads_customers
+          - name: raw_tyrell_corp_google_ads_ads
+            logic: {}
+          - name: raw_tyrell_corp_google_ads_ad_groups
+            logic: {}
+          - name: raw_tyrell_corp_google_ads_ad_performance
+            logic: {}
+          - name: raw_tyrell_corp_google_ads_campaigns
+            logic: {}
+          - name: raw_tyrell_corp_google_ads_customers
+            logic: {}
         logic: {}
       instagram_ads:
         enabled: true
@@ -34,27 +43,25 @@ tenants:
           daily_spend_mean: 2000.0
           campaign_count: 5
         tables:
-          - raw_tyrell_corp_instagram_ads_ads
-          - raw_tyrell_corp_instagram_ads_ad_sets
-          - raw_tyrell_corp_instagram_ads_campaigns
-          - raw_tyrell_corp_instagram_ads_facebook_insights
+          - name: raw_tyrell_corp_instagram_ads_ads
+            logic: {}
+          - name: raw_tyrell_corp_instagram_ads_ad_sets
+            logic: {}
+          - name: raw_tyrell_corp_instagram_ads_campaigns
+            logic: {}
+          - name: raw_tyrell_corp_instagram_ads_facebook_insights
+            logic: {}
         logic:
           conversion_event_pattern: ""
-      stripe:
-        enabled: true
-        generation:
-          daily_orders_mean: 40
-          aov_mean: 120.00
-        tables:
-          - raw_tyrell_corp_stripe_charges
-        logic: {}
       shopify:
         enabled: true
         generation:
           product_count: 20
         tables:
-          - raw_tyrell_corp_shopify_orders
-          - raw_tyrell_corp_shopify_products
+          - name: raw_tyrell_corp_shopify_orders
+            logic: {}
+          - name: raw_tyrell_corp_shopify_products
+            logic: {}
         logic: {}
       google_analytics:
         enabled: true
@@ -62,7 +69,8 @@ tenants:
           organic_traffic_ratio: 0.3
           conversion_rate: 0.02
         tables:
-          - raw_tyrell_corp_google_analytics_events
+          - name: raw_tyrell_corp_google_analytics_events
+            logic: {}
         logic:
           conversion_events:
             - purchase
@@ -84,11 +92,16 @@ tenants:
           cpc_mean: 3.50
           campaign_count: 3
         tables:
-          - raw_wayne_enterprises_google_ads_ads
-          - raw_wayne_enterprises_google_ads_ad_groups
-          - raw_wayne_enterprises_google_ads_ad_performance
-          - raw_wayne_enterprises_google_ads_campaigns
-          - raw_wayne_enterprises_google_ads_customers
+          - name: raw_wayne_enterprises_google_ads_ads
+            logic: {}
+          - name: raw_wayne_enterprises_google_ads_ad_groups
+            logic: {}
+          - name: raw_wayne_enterprises_google_ads_ad_performance
+            logic: {}
+          - name: raw_wayne_enterprises_google_ads_campaigns
+            logic: {}
+          - name: raw_wayne_enterprises_google_ads_customers
+            logic: {}
         logic: {}
       google_analytics:
         enabled: true
@@ -96,7 +109,8 @@ tenants:
           organic_traffic_ratio: 0.45
           conversion_rate: 0.03
         tables:
-          - raw_wayne_enterprises_google_analytics_events
+          - name: raw_wayne_enterprises_google_analytics_events
+            logic: {}
         logic:
           conversion_events:
             - purchase
@@ -111,8 +125,10 @@ tenants:
           product_count: 5
           daily_orders_mean: 10.0
         tables:
-          - raw_wayne_enterprises_shopify_orders
-          - raw_wayne_enterprises_shopify_products
+          - name: raw_wayne_enterprises_shopify_orders
+            logic: {}
+          - name: raw_wayne_enterprises_shopify_products
+            logic: {}
         logic: {}
 
   - slug: stark_industries
@@ -124,13 +140,6 @@ tenants:
         generation:
           daily_orders_mean: 25.0
           product_count: 50
-        tables: []
-        logic: {}
-      stripe:
-        enabled: true
-        generation:
-          daily_orders_mean: 25.0
-          aov_mean: 150.0
         tables: []
         logic: {}
       linkedin_ads:

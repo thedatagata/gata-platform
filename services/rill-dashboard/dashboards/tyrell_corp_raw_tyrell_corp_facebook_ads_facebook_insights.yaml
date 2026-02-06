@@ -1,35 +1,11 @@
 dimensions:
-- column: ad_id
-  label: Ad_Id
-  name: ad_id
-- column: campaign_id
-  label: Campaign_Id
-  name: campaign_id
-- column: adset_id
-  label: Adset_Id
-  name: adset_id
-- column: date_start
-  label: Date_Start
-  name: date_start
 - column: _dlt_load_id
   label: _Dlt_Load_Id
   name: _dlt_load_id
 - column: _dlt_id
   label: _Dlt_Id
   name: _dlt_id
-measures:
-- expression: sum(spend)
-  label: Spend
-  name: spend
-- expression: sum(impressions)
-  label: Impressions
-  name: impressions
-- expression: sum(clicks)
-  label: Clicks
-  name: clicks
-- expression: sum(conversions)
-  label: Conversions
-  name: conversions
+measures: []
 model: raw_tyrell_corp_facebook_ads_facebook_insights
 title: Tyrell_Corp - Tyrell Corp Facebook Ads Facebook Insights
 type: metrics_view

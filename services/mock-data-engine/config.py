@@ -23,10 +23,14 @@ class GenConfig(BaseModel):
     ad_group_count: Optional[int] = None
     sponsored_product_ratio: Optional[float] = None
 
+class TableConfig(BaseModel):
+    name: str
+    logic: Dict[str, Any] = {}
+
 class SourceConfig(BaseModel):
     enabled: bool = False
     generation: GenConfig = Field(default_factory=GenConfig)
-    tables: List[Any] = []
+    tables: List[TableConfig] = []
 
 class SourceRegistry(BaseModel):
     facebook_ads: SourceConfig = SourceConfig()

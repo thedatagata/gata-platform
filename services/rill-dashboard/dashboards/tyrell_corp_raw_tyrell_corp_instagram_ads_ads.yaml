@@ -1,22 +1,4 @@
 dimensions:
-- column: id
-  label: Id
-  name: id
-- column: adset_id
-  label: Adset_Id
-  name: adset_id
-- column: campaign_id
-  label: Campaign_Id
-  name: campaign_id
-- column: name
-  label: Name
-  name: name
-- column: creative_id
-  label: Creative_Id
-  name: creative_id
-- column: status
-  label: Status
-  name: status
 - column: _dlt_load_id
   label: _Dlt_Load_Id
   name: _dlt_load_id

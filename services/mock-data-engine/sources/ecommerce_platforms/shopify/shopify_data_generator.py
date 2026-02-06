@@ -9,11 +9,13 @@ def generate_shopify_data(tenant_slug: str, config: Any, stripe_charges: List[di
     """
     Generates Shopify Orders matched 1:1 with Stripe Charges.
     """
+    # FIX: Added fallback logic to prevent 'NoneType' error if product_count is missing
+    n_products = getattr(config, 'product_count', None) or getattr(config, 'product_catalog_size', 10) or 10
+    
     # 1. Generate Products Catalog
-    product_ids = [random.randint(1000000000, 9999999999) for _ in range(config.product_count)]
+    product_ids = [random.randint(1000000000, 9999999999) for _ in range(n_products)]
     products = pl.DataFrame({
         "id": product_ids,
-        # FIXED: Replaced non-existent 'commerce_product_name' with 'catch_phrase'
         "title": [fake.catch_phrase().title() for _ in product_ids],
         "product_type": "Mock Product",
         "status": "active",

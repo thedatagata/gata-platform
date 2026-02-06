@@ -52,6 +52,14 @@ connectors:
       - ad_sets
       - campaigns
       - facebook_insights
+  - name: instagram_ads
+    version: v19
+    master_model_id: facebook_ads_api_v1
+    objects:
+      - ads
+      - ad_sets
+      - campaigns
+      - facebook_insights
   - name: google_ads
     version: v16
     master_model_id: google_ads_api_v1
@@ -61,3 +69,22 @@ connectors:
       - ad_performance
       - campaigns
       - customers
+  - name: google_analytics
+    version: ga4_v1
+    master_model_id: google_analytics_api_v1
+    objects:
+      - events
+  - name: tiktok_ads
+    version: v1.3
+    master_model_id: tiktok_ads_api_v1
+    objects:
+      - campaigns
+      - ad_groups
+      - ads
+      - ads_reports_daily
+  - name: shopify
+    version: v1
+    master_model_id: shopify_api_v1
+    objects:
+      - products
+      - orders

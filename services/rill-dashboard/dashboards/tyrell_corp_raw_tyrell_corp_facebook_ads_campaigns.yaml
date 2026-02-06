@@ -1,16 +1,4 @@
 dimensions:
-- column: id
-  label: Id
-  name: id
-- column: name
-  label: Name
-  name: name
-- column: objective
-  label: Objective
-  name: objective
-- column: status
-  label: Status
-  name: status
 - column: _dlt_load_id
   label: _Dlt_Load_Id
   name: _dlt_load_id

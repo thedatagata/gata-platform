@@ -1,19 +1,4 @@
 dimensions:
-- column: resource_name
-  label: Resource_Name
-  name: resource_name
-- column: id
-  label: Id
-  name: id
-- column: descriptive_name
-  label: Descriptive_Name
-  name: descriptive_name
-- column: currency_code
-  label: Currency_Code
-  name: currency_code
-- column: time_zone
-  label: Time_Zone
-  name: time_zone
 - column: _dlt_load_id
   label: _Dlt_Load_Id
   name: _dlt_load_id

@@ -1,47 +1,11 @@
 dimensions:
-- column: event_name
-  label: Event_Name
-  name: event_name
-- column: event_date
-  label: Event_Date
-  name: event_date
-- column: user_pseudo_id
-  label: User_Pseudo_Id
-  name: user_pseudo_id
-- column: traffic_source__source
-  label: Traffic_Source__Source
-  name: traffic_source__source
-- column: traffic_source__medium
-  label: Traffic_Source__Medium
-  name: traffic_source__medium
-- column: traffic_source__campaign
-  label: Traffic_Source__Campaign
-  name: traffic_source__campaign
-- column: geo__country
-  label: Geo__Country
-  name: geo__country
-- column: geo__city
-  label: Geo__City
-  name: geo__city
 - column: _dlt_load_id
   label: _Dlt_Load_Id
   name: _dlt_load_id
 - column: _dlt_id
   label: _Dlt_Id
   name: _dlt_id
-- column: ecommerce__transaction_id
-  label: Ecommerce__Transaction_Id
-  name: ecommerce__transaction_id
-- column: ecommerce__currency
-  label: Ecommerce__Currency
-  name: ecommerce__currency
-measures:
-- expression: sum(event_timestamp)
-  label: Event_Timestamp
-  name: event_timestamp
-- expression: sum(ecommerce__value)
-  label: Ecommerce__Value
-  name: ecommerce__value
+measures: []
 model: raw_tyrell_corp_google_analytics_events
 title: Tyrell_Corp - Tyrell Corp Google Analytics Events
 type: metrics_view

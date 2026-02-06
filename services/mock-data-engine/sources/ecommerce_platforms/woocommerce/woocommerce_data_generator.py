@@ -12,8 +12,8 @@ def generate_woocommerce_data(tenant_slug: str, config: Any, stripe_charges: Lis
     Generates WooCommerce data.
     Objects: orders, products
     """
-    n_products = getattr(config, 'product_count', 50)
-    daily_orders = getattr(config, 'daily_orders_mean', 25.0)
+    n_products = config.product_count or config.product_catalog_size or 50
+    daily_orders = config.daily_orders_mean or config.daily_order_count or 25.0
     
     # 1. Products
     product_ids = np.arange(1000, 1000 + n_products)
