@@ -25,7 +25,3 @@ on-run-end:
   - "{{ upload_run_results() }}"
   - "{{ upload_model_definitions() }}"
   - "{{ upload_test_definitions() }}"
-
-models:
-  platform:
-    +enabled: true

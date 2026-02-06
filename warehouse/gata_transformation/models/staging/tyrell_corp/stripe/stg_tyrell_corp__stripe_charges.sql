@@ -2,13 +2,7 @@
 -- depends_on: {{ ref('platform_mm__stripe_api_v1_charges') }}
 {{ config(materialized='view', post_hook=["{{ sync_to_schema_history() }}", "{{ sync_to_master_hub('stripe_api_v1_charges') }}"]) }}
 
-WITH latest_config AS (
-    SELECT tenant_slug, tenant_skey 
-    FROM {{ ref('platform_sat__tenant_config_history') }}
-    WHERE tenant_slug = 'tyrell_corp'
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY tenant_slug ORDER BY updated_at DESC) = 1
-),
-source_meta AS (
+WITH source_meta AS (
     SELECT 
         '14569fc468cc217e53315dd992048fb2'::VARCHAR as source_schema_hash,
         '{"_dlt_id": "Type: VARCHAR", "_dlt_load_id": "Type: VARCHAR", "amount": "Type: BIGINT", "amount_captured": "Type: BIGINT", "amount_refunded": "Type: BIGINT", "created": "Type: TIMESTAMP WITH TIME ZONE", "currency": "Type: VARCHAR", "id": "Type: VARCHAR", "paid": "Type: BOOLEAN", "payment_method_details__card__brand": "Type: VARCHAR", "payment_method_details__card__last4": "Type: VARCHAR", "payment_method_details__type": "Type: VARCHAR", "refunded": "Type: BOOLEAN", "status": "Type: VARCHAR"}'::JSON as source_schema,
@@ -16,8 +10,8 @@ source_meta AS (
 )
 
 SELECT
-    c.tenant_slug,
-    c.tenant_skey,
+    'tyrell_corp'::VARCHAR,
+    {{ generate_tenant_key("'tyrell_corp'") }},
     'stripe'::VARCHAR as source_platform,
     m.source_schema_hash,
     m.source_schema,
@@ -29,5 +23,4 @@ FROM (
     SELECT *, 'stripe_charges' as _src_table
     FROM {{ ref('src_tyrell_corp_stripe__charges') }}
 ) t
-CROSS JOIN latest_config c
 CROSS JOIN source_meta m
