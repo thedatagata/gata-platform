@@ -71,23 +71,18 @@ def ensure_master_model_exists(master_model_id, source_platform, object_name):
 
     print(f"✨ Scaffolding NEW Master Model file: {file_path.name}")
     
-    # Thin Master Model Sink Template
-    # Stores only raw payloads and metadata keys; no transformation logic.
+    # Master Sink Template (Strict Empty Shell)
     sql_content = f"""
--- Master Model generated for {source_platform} {object_name}
-{{{{ config(materialized='incremental', unique_key='hub_key') }}}}
+{{{{ config(materialized='table') }}}}
 
--- Thin Master Model Sink
--- Stores raw payloads and metadata keys.
-SELECT
-    hub_key,
-    tenant_slug,
-    source_platform,
-    source_schema_hash,
-    raw_data_payload,
-    loaded_at
-FROM {{{{ this }}}}
-WHERE 1=0 -- Empty shell, populated by push
+SELECT 
+    CAST(NULL AS VARCHAR) as tenant_slug,
+    CAST(NULL AS VARCHAR) as hub_key,
+    CAST(NULL AS VARCHAR) as source_platform,
+    CAST(NULL AS VARCHAR) as source_schema_hash,
+    CAST(NULL AS JSON) as raw_data_payload,
+    CAST(NULL AS TIMESTAMP) as loaded_at
+WHERE 1=0
 """
     with open(file_path, "w") as f:
         f.write(sql_content.strip())
@@ -120,7 +115,7 @@ def generate_scaffolding(tenant_slug, target, registry_schema='main'):
             stg_path = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / source_name / stg_filename
             stg_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Hardcoded Routing: The destination is fixed at onboarding time
+            # Staging Model Template with Hardcoded Push
             stg_content = f"""
 {{{{ config(materialized='view') }}}}
 
@@ -133,6 +128,7 @@ SELECT
     current_timestamp as loaded_at
 FROM {{{{ source('{tenant_slug}_{source_name}', '{phys_table}') }}}}
 
+-- HARDCODED PUSH: Direct merge into designated immutable sink
 {{% do sync_to_master_hub('{master_model_id}') %}}
 """
             with open(stg_path, "w") as f:

@@ -1,12 +1,10 @@
--- Master Model for woocommerce_api_v1_products
-{{ config(materialized='incremental', unique_key='hub_key') }}
+{{ config(materialized='table') }}
 
-SELECT
-    hub_key,
-    tenant_slug,
-    source_platform,
-    source_schema_hash,
-    raw_data_payload,
-    loaded_at
-FROM {{ this }}
+SELECT 
+    CAST(NULL AS VARCHAR) as tenant_slug,
+    CAST(NULL AS VARCHAR) as hub_key,
+    CAST(NULL AS VARCHAR) as source_platform,
+    CAST(NULL AS VARCHAR) as source_schema_hash,
+    CAST(NULL AS JSON) as raw_data_payload,
+    CAST(NULL AS TIMESTAMP) as loaded_at
 WHERE 1=0
