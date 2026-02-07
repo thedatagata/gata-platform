@@ -44,12 +44,6 @@ class MockOrchestrator:
         if not enabled_ads:
             raise ValueError(f"Tenant '{self.config.slug}' must have at least one Paid Ads source.")
 
-        # Legacy logic: restrict to maximum 1 for ecommerce/analytics (optional, kept for consistency)
-        if len(enabled_ecommerce) > 1:
-            raise ValueError(f"Tenant '{self.config.slug}' has multiple ecommerce platforms.")
-        if len(enabled_analytics) > 1:
-            raise ValueError(f"Tenant '{self.config.slug}' has multiple digital analytics sources.")
-
     def run(self) -> Dict[str, Any]:
         self._validate_source_mix()
         destination = 'duckdb' if self.credentials and 'duckdb' in self.credentials else 'motherduck'

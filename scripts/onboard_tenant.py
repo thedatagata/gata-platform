@@ -61,7 +61,7 @@ def lookup_master_model(schema_hash: str, target: str = 'local', registry_schema
 def ensure_master_model_exists(master_model_id, source_platform, object_name):
     """
     Checks if the dbt master model file exists. 
-    If not, scaffolds a shell using the appropriate factory macro.
+    If not, scaffolds a thin sink shell.
     """
     MASTER_MODEL_DIR.mkdir(parents=True, exist_ok=True)
     file_path = MASTER_MODEL_DIR / f"platform_mm__{master_model_id}.sql"
@@ -71,24 +71,23 @@ def ensure_master_model_exists(master_model_id, source_platform, object_name):
 
     print(f"✨ Scaffolding NEW Master Model file: {file_path.name}")
     
-    # Determine which factory macro to use based on platform/object
-    # This aligns with existing blended fact logic
-    factory_call = ""
-    if any(p in source_platform for p in ['ads', 'facebook', 'google', 'tiktok', 'linkedin', 'bing', 'amazon']):
-        factory_call = f"{{{{ build_ads_blended_fact('{master_model_id}') }}}}"
-    elif any(p in source_platform for p in ['shopify', 'woocommerce', 'bigcommerce']):
-        factory_call = f"{{{{ build_ecommerce_fact('{master_model_id}') }}}}"
-    elif 'analytics' in source_platform or source_platform in ['amplitude', 'mixpanel']:
-        factory_call = f"{{{{ build_analytics_fact('{master_model_id}') }}}}"
-    else:
-        # Fallback to a basic union if category is unclear
-        factory_call = f"-- Generic Master Model for {master_model_id}\nSELECT * FROM {{{{ ref('hub_tenant_sources') }}}} WHERE master_model_ref = '{master_model_id}'"
-
+    # Thin Master Model Sink Template
+    # Stores only raw payloads and metadata keys; no transformation logic.
     sql_content = f"""
 -- Master Model generated for {source_platform} {object_name}
 {{{{ config(materialized='incremental', unique_key='hub_key') }}}}
 
-{factory_call}
+-- Thin Master Model Sink
+-- Stores raw payloads and metadata keys.
+SELECT
+    hub_key,
+    tenant_slug,
+    source_platform,
+    source_schema_hash,
+    raw_data_payload,
+    loaded_at
+FROM {{{{ this }}}}
+WHERE 1=0 -- Empty shell, populated by push
 """
     with open(file_path, "w") as f:
         f.write(sql_content.strip())
@@ -117,5 +116,26 @@ def generate_scaffolding(tenant_slug, target, registry_schema='main'):
                 ensure_master_model_exists(master_model_id, source_name, obj_name)
 
             # 3. Generate Staging Model linking to the master model
-            # (existing staging model SQL generation using master_model_id)
-            # ...
+            stg_filename = f"stg_{tenant_slug}__{source_name}_{obj_name}.sql"
+            stg_path = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / source_name / stg_filename
+            stg_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Hardcoded Routing: The destination is fixed at onboarding time
+            stg_content = f"""
+{{{{ config(materialized='view') }}}}
+
+SELECT
+    '{tenant_slug}'::VARCHAR as tenant_slug,
+    {{{{ generate_tenant_key("'{tenant_slug}'") }}}} as hub_key,
+    '{source_name}'::VARCHAR as source_platform,
+    '{schema_hash}'::VARCHAR as source_schema_hash,
+    raw_data_payload,
+    current_timestamp as loaded_at
+FROM {{{{ source('{tenant_slug}_{source_name}', '{phys_table}') }}}}
+
+{{% do sync_to_master_hub('{master_model_id}') %}}
+"""
+            with open(stg_path, "w") as f:
+                f.write(stg_content.strip())
+            
+            print(f"   Created staging model: {stg_filename}")

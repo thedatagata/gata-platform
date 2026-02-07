@@ -1,3 +1,12 @@
-{{ config(materialized='table') }}
+-- Master Model for google_ads_api_v1_ad_performance
+{{ config(materialized='incremental', unique_key='hub_key') }}
 
-{{ build_ads_blended_fact('google_ads_api_v1_ad_performance') }}
+SELECT
+    hub_key,
+    tenant_slug,
+    source_platform,
+    source_schema_hash,
+    raw_data_payload,
+    loaded_at
+FROM {{ this }}
+WHERE 1=0
