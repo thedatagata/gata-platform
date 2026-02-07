@@ -5,11 +5,11 @@ from typing import Dict, List, Any
 
 fake = Faker()
 
-def generate_shopify_data(tenant_slug: str, config: Any, stripe_charges: List[dict]) -> Dict[str, List[dict]]:
+def generate_shopify_data(tenant_slug: str, config: Any, stripe_charges: List[dict] = None) -> Dict[str, List[dict]]:
     """
-    Generates Shopify Orders matched 1:1 with Stripe Charges.
+    Generates Shopify Orders with numeric price types. 
+    Supports independent generation or 1:1 mapping with Stripe charges.
     """
-    # FIX: Added fallback logic to prevent 'NoneType' error if product_count is missing
     n_products = getattr(config, 'product_count', None) or getattr(config, 'product_catalog_size', 10) or 10
     
     # 1. Generate Products Catalog
@@ -20,55 +20,40 @@ def generate_shopify_data(tenant_slug: str, config: Any, stripe_charges: List[di
         "product_type": "Mock Product",
         "status": "active",
         "created_at": [fake.date_time_this_year() for _ in product_ids],
-        "variants": [[{"id": random.randint(100,999), "price": "10.00"}] for _ in product_ids]
+        "variants": [[{"id": random.randint(100,999), "price": 10.0}] for _ in product_ids] 
     })
 
-    # 2. Generate Orders from Stripe Charges
+    # 2. Generate Orders (Independent or Mapped)
     orders = []
     
-    # Handle case where no charges exist to avoid errors
-    if not stripe_charges:
-        return {"products": products.to_dicts(), "orders": []}
-
-    customer_pool = [{"id": random.randint(1, 10000), "email": fake.email()} for _ in range(int(len(stripe_charges) * 0.7))]
-    
-    for charge in stripe_charges:
-        # 30% New Customer, 70% Returning (from pool)
-        if customer_pool and random.random() > 0.3:
-            customer = random.choice(customer_pool)
-        else:
-            customer = {"id": random.randint(10001, 99999), "email": fake.email()}
-            customer_pool.append(customer)
-
-        order_id = random.randint(1000000000, 9999999999)
-        # Use .get() for safety, though keys should exist
-        amount = charge.get('amount', 0)
-        price_str = str(amount / 100)
-        created_at = charge.get('created', fake.date_time_this_year())
-        charge_id = charge.get('id', '')
-        
-        orders.append({
-            "id": order_id,
-            "name": f"#{random.randint(1000, 99999)}",
-            "email": customer['email'],
-            "created_at": created_at,
-            "processed_at": created_at,
-            "updated_at": created_at,
-            "total_price": price_str,
-            "subtotal_price": price_str,
-            "currency": "USD",
-            "financial_status": "paid",
-            "payment_gateway_names": ["stripe"],
-            "customer": customer,
-            # LINKING KEY: This allows us to join Shopify -> Stripe
-            "note_attributes": [{"name": "stripe_charge_id", "value": charge_id}], 
-            "line_items": [{
-                "id": random.randint(1000,9999),
-                "product_id": random.choice(product_ids) if product_ids else None,
-                "quantity": 1,
-                "price": price_str
-            }]
-        })
+    if stripe_charges:
+        # Map 1:1 with Stripe logic
+        customer_pool = [{"id": random.randint(1, 10000), "email": fake.email()} for _ in range(int(len(stripe_charges) * 0.7))]
+        for charge in stripe_charges:
+            customer = random.choice(customer_pool) if (customer_pool and random.random() > 0.3) else {"id": random.randint(10001, 99999), "email": fake.email()}
+            price = round(charge.get('amount', 0) / 100.0, 2)
+            created_at = charge.get('created', fake.date_time_this_year())
+            
+            orders.append({
+                "id": random.randint(1000000000, 9999999999), "name": f"#{random.randint(1000, 99999)}",
+                "email": customer['email'], "created_at": created_at, "processed_at": created_at, "updated_at": created_at,
+                "total_price": price, "subtotal_price": price, "currency": "USD", "financial_status": "paid",
+                "customer": customer, "note_attributes": [{"name": "stripe_charge_id", "value": charge.get('id', '')}],
+                "line_items": [{"id": random.randint(1000,9999), "quantity": 1, "price": price}]
+            })
+    else:
+        # Independent Mock Data Generation for Library Init
+        n_orders = getattr(config, 'daily_order_count', 20) or 20
+        for _ in range(n_orders):
+            price = round(random.uniform(50.0, 500.0), 2)
+            created_at = fake.date_time_this_year()
+            orders.append({
+                "id": random.randint(1000000000, 9999999999), "name": f"#{random.randint(1000, 99999)}",
+                "email": fake.email(), "created_at": created_at, "processed_at": created_at, "updated_at": created_at,
+                "total_price": price, "subtotal_price": price, "currency": "USD", "financial_status": "paid",
+                "customer": {"id": random.randint(1, 1000), "email": fake.email()},
+                "line_items": [{"id": random.randint(1000,9999), "quantity": 1, "price": price}]
+            })
 
     return {
         "products": products.to_dicts(),

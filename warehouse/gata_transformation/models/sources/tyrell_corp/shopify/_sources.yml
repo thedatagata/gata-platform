@@ -1,53 +1,8 @@
-version: 2
 sources:
-- name: tyrell_corp_shopify_raw
-  schema: shopify
+- database: my_db
+  name: tyrell_corp_shopify
+  schema: tyrell_corp
   tables:
-  - name: raw_tyrell_corp_shopify_orders
-    description: Raw orders data for tyrell_corp
-    columns:
-    - name: id
-      description: 'Type: BIGINT'
-    - name: name
-      description: 'Type: VARCHAR'
-    - name: email
-      description: 'Type: VARCHAR'
-    - name: created_at
-      description: 'Type: TIMESTAMP WITH TIME ZONE'
-    - name: processed_at
-      description: 'Type: TIMESTAMP WITH TIME ZONE'
-    - name: updated_at
-      description: 'Type: TIMESTAMP WITH TIME ZONE'
-    - name: total_price
-      description: 'Type: VARCHAR'
-    - name: subtotal_price
-      description: 'Type: VARCHAR'
-    - name: currency
-      description: 'Type: VARCHAR'
-    - name: financial_status
-      description: 'Type: VARCHAR'
-    - name: customer__id
-      description: 'Type: BIGINT'
-    - name: customer__email
-      description: 'Type: VARCHAR'
-    - name: _dlt_load_id
-      description: 'Type: VARCHAR'
-    - name: _dlt_id
-      description: 'Type: VARCHAR'
   - name: raw_tyrell_corp_shopify_products
-    description: Raw products data for tyrell_corp
-    columns:
-    - name: id
-      description: 'Type: BIGINT'
-    - name: title
-      description: 'Type: VARCHAR'
-    - name: product_type
-      description: 'Type: VARCHAR'
-    - name: status
-      description: 'Type: VARCHAR'
-    - name: created_at
-      description: 'Type: TIMESTAMP WITH TIME ZONE'
-    - name: _dlt_load_id
-      description: 'Type: VARCHAR'
-    - name: _dlt_id
-      description: 'Type: VARCHAR'
+  - name: raw_tyrell_corp_shopify_orders
+version: 2

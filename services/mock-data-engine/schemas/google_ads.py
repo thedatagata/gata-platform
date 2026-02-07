@@ -2,47 +2,43 @@ from pydantic import BaseModel
 from datetime import date
 from typing import Optional, List
 
-# --- Dimensions ---
-
 class GAdsCustomer(BaseModel):
-    resource_name: str # customers/{customer_id}
-    id: str
-    descriptive_name: str
-    currency_code: str
-    time_zone: str
+    resource_name: Optional[str] = None
+    id: Optional[str] = None
+    descriptive_name: Optional[str] = None
+    currency_code: Optional[str] = None
+    time_zone: Optional[str] = None
 
 class GAdsCampaign(BaseModel):
-    resource_name: str # customers/{id}/campaigns/{id}
-    id: str
-    name: str
-    status: str
-    advertising_channel_type: str # SEARCH, DISPLAY, PERFORMANCE_MAX
+    resource_name: Optional[str] = None
+    id: Optional[str] = None
+    name: Optional[str] = None
+    status: Optional[str] = None
+    advertising_channel_type: Optional[str] = None
 
 class GAdsAdGroup(BaseModel):
-    resource_name: str
-    id: str
-    campaign_id: str
-    name: str
-    status: str
-    type: str # SEARCH_STANDARD
+    resource_name: Optional[str] = None
+    id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    name: Optional[str] = None
+    status: Optional[str] = None
+    type: Optional[str] = None
 
 class GAdsAd(BaseModel):
-    resource_name: str
-    id: str
-    ad_group_id: str
-    name: Optional[str] # Often constructed from headlines
-    final_urls: List[str]
-    status: str
-
-# --- Fact Table (Ad Performance) ---
+    resource_name: Optional[str] = None
+    id: Optional[str] = None
+    ad_group_id: Optional[str] = None
+    name: Optional[str] = None
+    final_urls: Optional[List[str]] = None
+    status: Optional[str] = None
 
 class GAdsAdPerformance(BaseModel):
-    date: date
-    customer_id: str
-    campaign_id: str
-    ad_group_id: str
-    ad_id: str
-    cost_micros: int
-    impressions: int
-    clicks: int
-    conversions: float
+    date_start: Optional[date] = None
+    customer_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    ad_group_id: Optional[str] = None
+    ad_id: Optional[str] = None
+    cost_micros: Optional[int] = None
+    impressions: Optional[int] = None
+    clicks: Optional[int] = None
+    conversions: Optional[float] = None

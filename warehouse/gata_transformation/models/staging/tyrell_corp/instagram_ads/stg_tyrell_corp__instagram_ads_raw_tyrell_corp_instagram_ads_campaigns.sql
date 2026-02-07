@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='tyrell_corp', source_name='instagram_ads', schema_hash='d41d8cd98f00b204e9800998ecf8427e', master_model_id='linkedin_ads_api_v1_ad_analytics_by_campaign', source_table='raw_tyrell_corp_instagram_ads_raw_tyrell_corp_instagram_ads_campaigns') }}

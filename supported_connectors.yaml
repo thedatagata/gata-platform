@@ -4,6 +4,7 @@ connectors:
     master_model_id: linkedin_ads_api_v1
     objects:
       - campaigns
+      - ad_analytics
       - ad_analytics_by_campaign
   - name: bing_ads
     version: v13

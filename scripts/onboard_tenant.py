@@ -1,4 +1,3 @@
-import yaml
 import pathlib
 import argparse
 import sys
@@ -6,15 +5,20 @@ import duckdb
 import os
 import json
 import hashlib
-from datetime import datetime
+import yaml
 
-# --- Configuration ---
+# --- Path & Service Setup ---
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "warehouse" / "sandbox.duckdb"
-DBT_PROJECT_DIR = PROJECT_ROOT / "gata_transformation" # Fixed path to match repo structure
-MASTER_MODEL_DIR = DBT_PROJECT_DIR / "models" / "platform" / "master_models"
+DBT_PROJECT_DIR = PROJECT_ROOT / "warehouse" / "gata_transformation" 
+
+# FIX: Ensure orchestrator is discoverable
+sys.path.append(str(PROJECT_ROOT / "services" / "mock-data-engine"))
+
+from orchestrator import MockOrchestrator
+from config import load_manifest
 
 def load_env_file():
+    """Loads environment variables from the .env file at the project root."""
     env_path = PROJECT_ROOT / ".env"
     if env_path.exists():
         with open(env_path, "r") as f:
@@ -26,115 +30,105 @@ def load_env_file():
 
 load_env_file()
 
-def get_db_connection(target):
-    if target in ['motherduck', 'dev', 'prod']:
-        token = os.environ.get("MOTHERDUCK_TOKEN")
-        # Ensure we target the database where the registry lives
-        conn_str = "md:connectors" 
-        if token:
-             conn_str += f"?motherduck_token={token}"
-        
-        try:
-            return duckdb.connect(conn_str)
-        except Exception as e:
-            print(f"❌ Failed to connect to MotherDuck: {e}")
-            sys.exit(1)
-    else:
-        # For local, assume connectors registry is in its own duckdb
-        local_db = PROJECT_ROOT / "warehouse" / "connectors.duckdb"
-        return duckdb.connect(str(local_db))
+def get_db_connection(target='dev'):
+    """Aligns connection with profiles.yml."""
+    if target == 'local':
+        return duckdb.connect(str(PROJECT_ROOT / "warehouse" / "sandbox.duckdb"))
+    token = os.environ.get("MOTHERDUCK_TOKEN")
+    con = duckdb.connect(f"md:my_db?motherduck_token={token}" if token else "md:my_db")
+    return con
 
-def lookup_master_model(schema_hash: str, target: str = 'local', registry_schema: str = 'main') -> str:
-    """Queries the central registry to see if this schema hash is already mapped."""
+def calculate_dlt_schema_hash(dlt_schema: dict, table_name: str) -> str:
+    """Calculates DNA from physical RELATIONAL columns."""
+    table_meta = dlt_schema.get('tables', {}).get(table_name, {})
+    columns = table_meta.get('columns', {})
+    sorted_cols = sorted([
+        (n, str(p.get('data_type'))) 
+        for n, p in columns.items() 
+        if not n.startswith(("_dlt", "_airbyte"))
+    ])
+    signature = "|".join([f"{c}:{t}" for c, t in sorted_cols])
+    return hashlib.md5(signature.encode('utf-8')).hexdigest()
+
+def lookup_master_model(schema_hash: str, target: str = 'dev') -> str:
+    """Queries registry for hard-wired routing."""
     con = get_db_connection(target)
     try:
-        # Pointing to the table created by the library initialization
-        query = f"SELECT master_model_id FROM {registry_schema}.connector_blueprints WHERE source_schema_hash = '{schema_hash}' LIMIT 1"
+        query = f"SELECT master_model_id FROM main.connector_blueprints WHERE source_schema_hash = '{schema_hash}' LIMIT 1"
         result = con.sql(query).fetchone()
         return result[0] if result else 'unknown'
-    except Exception as e:
-        print(f"⚠️  Registry lookup failed: {e}")
-        return 'unknown'
     finally:
         con.close()
 
-def ensure_master_model_exists(master_model_id, source_platform, object_name):
-    """
-    Checks if the dbt master model file exists. 
-    If not, scaffolds a thin sink shell.
-    """
-    MASTER_MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = MASTER_MODEL_DIR / f"platform_mm__{master_model_id}.sql"
-    
-    if file_path.exists():
-        return True
+def generate_sources_yml(tenant_slug, source_name, tables):
+    """Automates source definitions for compilation."""
+    src_dir = DBT_PROJECT_DIR / "models" / "sources" / tenant_slug / source_name
+    src_dir.mkdir(parents=True, exist_ok=True)
+    source_cfg = {
+        "version": 2,
+        "sources": [{
+            "name": f"{tenant_slug}_{source_name}", "database": "my_db", "schema": tenant_slug,
+            "tables": [{"name": t} for t in tables]
+        }]
+    }
+    with open(src_dir / "_sources.yml", "w") as f:
+        yaml.dump(source_cfg, f, default_flow_style=False)
 
-    print(f"✨ Scaffolding NEW Master Model file: {file_path.name}")
-    
-    # Master Sink Template (Strict Empty Shell)
-    sql_content = f"""
-{{{{ config(materialized='table') }}}}
+def generate_scaffolding(tenant_slug, target, days=30):
+    """Onboards tenant via relational discovery and macro-driven bundling."""
+    manifest = load_manifest(str(PROJECT_ROOT / "tenants.yaml"))
+    tenant_config = next((t for t in manifest.tenants if t.slug == tenant_slug), None)
 
-SELECT 
-    CAST(NULL AS VARCHAR) as tenant_slug,
-    CAST(NULL AS VARCHAR) as tenant_skey,
-    CAST(NULL AS VARCHAR) as source_platform,
-    CAST(NULL AS VARCHAR) as source_schema_hash,
-    CAST(NULL AS JSON) as source_schema,
-    CAST(NULL AS JSON) as raw_data_payload,
-    CAST(NULL AS TIMESTAMP) as loaded_at
-WHERE 1=0
-"""
-    with open(file_path, "w") as f:
-        f.write(sql_content.strip())
-    
-    return True
+    if not tenant_config:
+        print(f"❌ Tenant {tenant_slug} not found.")
+        return
 
-def generate_scaffolding(tenant_slug, target, registry_schema='main'):
-    # ... (existing logic for reading tenants.yaml and setting up directories) ...
-    # Assume 'sources' dict contains source_name and tables list
-    
-    for source_name, tables in sources.items():
-        # (existing src/stg directory creation)
+    # 1. LAND DATA (FLATTENED)
+    print(f"📡 Loading mock data for {tenant_slug}...")
+    orchestrator = MockOrchestrator(tenant_config, days=days, credentials='motherduck' if target != 'local' else 'duckdb')
+    dlt_schema_dict = orchestrator.run() 
+
+    # 2. GENERATE DBT MODELS DYNAMICALLY
+    tenant_prefix = f"raw_{tenant_slug}_"
+    processed_sources = {}
+
+    for table_name in dlt_schema_dict.get('tables', {}).keys():
+        if not table_name.startswith(tenant_prefix): continue
         
-        for item in tables:
-            phys_table = item["physical_table"]
-            obj_name = item["object_name"]
-            
-            # (existing column and hash calculation logic)
-            schema_hash = hashlib.md5(schema_json.encode('utf-8')).hexdigest()
+        # Parse identity
+        parts = table_name.replace(tenant_prefix, "").split("_")
+        source_name = "_".join(parts[:-1]) 
+        if source_name not in processed_sources: 
+            processed_sources[source_name] = []
+        processed_sources[source_name].append(table_name)
 
-            # 1. Lookup the assigned ID from the library registry
-            master_model_id = lookup_master_model(schema_hash, target, registry_schema)
-            
-            # 2. PROACTIVE CHECK: Ensure the physical dbt model exists to target
-            if master_model_id != 'unknown':
-                ensure_master_model_exists(master_model_id, source_name, obj_name)
+        # Unique Routing
+        schema_hash = calculate_dlt_schema_hash(dlt_schema_dict, table_name)
+        master_model_id = lookup_master_model(schema_hash, target)
+        
+        if master_model_id == 'unknown':
+            print(f"⚠️  DNA {schema_hash[:8]} not registered for {table_name}. Skipping.")
+            continue
 
-            # 3. Generate Staging Model linking to the master model
-            stg_filename = f"stg_{tenant_slug}__{source_name}_{obj_name}.sql"
-            stg_path = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / source_name / stg_filename
-            stg_path.parent.mkdir(parents=True, exist_ok=True)
-            
-    # Staging Model Template with Hardcoded Push
-            source_category_key = source_name # Alias for clarity as per architecture doc
-            stg_content = f"""
-{{{{ config(materialized='view') }}}}
+        # 3. Macro-Driven Bundling
+        stg_dir = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / source_name
+        stg_dir.mkdir(parents=True, exist_ok=True)
+        stg_filename = f"stg_{tenant_slug}__{source_name}_{parts[-1]}.sql"
+        
+        stg_content = f"{{{{ generate_staging_pusher(tenant_slug='{tenant_slug}', source_name='{source_name}', schema_hash='{schema_hash}', master_model_id='{master_model_id}', source_table='{table_name}') }}}}"
+        
+        with open(stg_dir / stg_filename, "w") as f:
+            f.write(stg_content.strip())
+        print(f"✅ Created staging pusher: {stg_filename}")
 
-SELECT
-    '{tenant_slug}'::VARCHAR as tenant_slug,
-    {{{{ generate_tenant_key("'{tenant_slug}'") }}}} as tenant_skey,
-    '{source_category_key}'::VARCHAR as source_platform,
-    '{schema_hash}'::VARCHAR as source_schema_hash,
-    CAST(NULL AS JSON) as source_schema,
-    -- Pass payload as complex type for sync macro
-    raw_data_payload,
-    current_timestamp as loaded_at
-FROM {{{{ source('{tenant_slug}_{source_name}', '{phys_table}') }}}}
+    # 4. Finalize Sources
+    for source_name, tables in processed_sources.items():
+        generate_sources_yml(tenant_slug, source_name, tables)
 
-{{% do sync_to_master_hub('{master_model_id}') %}}
-"""
-            with open(stg_path, "w") as f:
-                f.write(stg_content.strip())
-            
-            print(f"   Created staging model: {stg_filename}")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("tenant_slug")
+    parser.add_argument("--target", default="dev")
+    parser.add_argument("--days", type=int, default=30)
+    args = parser.parse_args()
+    generate_scaffolding(args.tenant_slug, args.target, args.days)

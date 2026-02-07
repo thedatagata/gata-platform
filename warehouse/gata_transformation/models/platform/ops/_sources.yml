@@ -2,7 +2,6 @@ version: 2
 
 sources:
   - name: connectors
-    database: connectors
     schema: main
     tables:
       - name: connector_blueprints

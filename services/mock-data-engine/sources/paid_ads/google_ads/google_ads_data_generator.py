@@ -7,12 +7,6 @@ from typing import Dict, List, Any
 fake = Faker()
 
 def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[str, List[dict]]:
-    """
-    Generates Google Ads data with full hierarchy:
-    Customer -> Campaign -> AdGroup -> Ad -> Daily Metrics
-    """
-    
-    # --- 1. Customer (Account) ---
     customer_id = str(fake.random_number(digits=10, fix_len=True))
     customer = pl.DataFrame({
         "resource_name": [f"customers/{customer_id}"],
@@ -22,9 +16,7 @@ def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[s
         "time_zone": ["America/New_York"]
     })
 
-    # --- 2. Campaigns ---
-    # Fallback to 5 campaigns if configuration is missing
-    n_campaigns = config.campaign_count or 5 
+    n_campaigns = getattr(config, 'campaign_count', 5) or 5 
     campaign_ids = [str(fake.random_number(digits=10, fix_len=True)) for _ in range(n_campaigns)]
     
     campaigns = pl.DataFrame({
@@ -35,8 +27,6 @@ def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[s
         "advertising_channel_type": "SEARCH"
     })
 
-    # --- 3. Ad Groups ---
-    # Logic: Each Campaign has 3-5 Ad Groups
     ad_groups_list = []
     for cid in campaign_ids:
         n_groups = np.random.randint(3, 6)
@@ -50,14 +40,10 @@ def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[s
                 "status": "ENABLED",
                 "type": "SEARCH_STANDARD"
             })
-    
     ad_groups = pl.DataFrame(ad_groups_list)
 
-    # --- 4. Ads ---
-    # Logic: Each Ad Group has 2-4 Ads
     ads_list = []
     ag_ids = ad_groups["id"].to_list()
-    
     for ag_id in ag_ids:
         n_ads = np.random.randint(2, 5)
         for _ in range(n_ads):
@@ -66,17 +52,12 @@ def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[s
                 "resource_name": f"customers/{customer_id}/adGroupAds/{ag_id}~{ad_id}",
                 "id": ad_id,
                 "ad_group_id": ag_id,
-                "name": f"Ad: {fake.catch_phrase()}", # Responsive Search Ad Headline
+                "name": f"Ad: {fake.catch_phrase()}",
                 "final_urls": [f"https://{tenant_slug}.com/landing/{fake.slug()}"],
                 "status": "ENABLED"
             })
-            
     ads = pl.DataFrame(ads_list)
 
-    # --- 5. Ad Performance (The Fact Table) ---
-    
-    # Join Ads -> AdGroups -> Campaigns to get full lineage for the stats table
-    # We need campaign_id for the stats table
     ad_lineage = (
         ads.lazy()
         .join(ad_groups.lazy().select(["id", "campaign_id"]), left_on="ad_group_id", right_on="id")
@@ -84,15 +65,13 @@ def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[s
         .collect()
     )
 
-    # Cross Join with Date Range
     dates = pl.date_range(
         start=date.today() - timedelta(days=days),
         end=date.today(),
         interval="1d",
         eager=True
-    ).alias("date")
+    ).alias("date_start")
 
-    # Base Metrics Table: Every Ad gets a row per day
     stats = (
         ad_lineage
         .rename({"id": "ad_id"})
@@ -100,30 +79,19 @@ def generate_google_ads(tenant_slug: str, config: Any, days: int = 30) -> Dict[s
     )
     
     n_rows = len(stats)
-    
-    # Apply Levers
-    # Distribute the 'daily_spend_mean' across the rows
-    # Logic: Spend is LogNormal (some ads spend way more), correlated with Impressions
-    
-    # 1. Spend (micros)
-    # We want the SUM of daily spend to approx equal config.daily_spend_mean
-    # Per-ad mean = Total Mean / Total Ads
-    per_ad_mean = config.daily_spend_mean / len(ads)
+    daily_spend_mean = getattr(config, 'daily_spend_mean', 500.0) or 500.0
+    per_ad_mean = daily_spend_mean / len(ads)
     spend_micros = np.random.lognormal(mean=np.log(per_ad_mean), sigma=1.0, size=n_rows) * 1_000_000
     
-    # 2. Clicks (derived from Cost / CPC)
-    # Avoid div by zero
-    cpc_actual = np.random.normal(config.cpc_mean, 0.5, n_rows)
-    cpc_actual = np.maximum(cpc_actual, 0.10) # Min CPC $0.10
+    cpc_mean = getattr(config, 'cpc_mean', 1.2) or 1.2
+    cpc_actual = np.random.normal(cpc_mean, 0.5, n_rows)
+    cpc_actual = np.maximum(cpc_actual, 0.10)
     clicks = (spend_micros / 1_000_000 / cpc_actual).astype(int)
     
-    # 3. Impressions (derived from Clicks / CTR)
-    ctr_actual = np.random.beta(2, 100, n_rows) # Skewed towards low CTR (e.g. 2-5%)
-    # Ensure impressions >= clicks
+    ctr_actual = np.random.beta(2, 100, n_rows)
     impressions = (clicks / ctr_actual).astype(int)
     impressions = np.maximum(impressions, clicks) 
 
-    # 4. Conversions (Rare event)
     conversions = (clicks * np.random.uniform(0.01, 0.10, n_rows)).astype(int)
 
     stats = stats.with_columns([

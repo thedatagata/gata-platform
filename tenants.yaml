@@ -1,7 +1,7 @@
 tenants:
   - slug: tyrell_corp
     business_name: "Tyrell Corporation"
-    status: active
+    status: onboarding
     sources:
       facebook_ads:
         enabled: true
@@ -133,19 +133,30 @@ tenants:
 
   - slug: stark_industries
     business_name: "Stark Industries"
-    status: onboarding
+    status: active # SET TO ONBOARDING FOR TEST
     sources:
       woocommerce:
         enabled: true
         generation:
           daily_orders_mean: 25.0
           product_count: 50
-        tables: []
-        logic: {}
+        tables: # ADD TABLE DEFINITIONS
+          - name: orders
+            logic: {}
+          - name: products
+            logic: {}
+      google_analytics: # ADD REQUIRED ANALYTICS SOURCE
+        enabled: true
+        generation:
+          organic_traffic_ratio: 0.5
+        tables:
+          - name: events
+            logic: {}
       linkedin_ads:
         enabled: true
         generation:
           daily_spend_mean: 1500.0
           campaign_count: 5
-        tables: []
-        logic: {}
+        tables:
+          - name: campaigns
+            logic: {}

@@ -1,27 +1,28 @@
+# services/mock-data-engine/config.py
 import yaml
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 class GenConfig(BaseModel):
-    # Generic container for generation levers
-    daily_spend_mean: Optional[float] = None
-    campaign_count: Optional[int] = None
-    cpc_mean: Optional[float] = None
-    daily_orders_mean: Optional[float] = None
-    aov_mean: Optional[float] = None
-    product_count: Optional[int] = None
-    organic_traffic_ratio: Optional[float] = None
-    conversion_rate: Optional[float] = None
-    # New Connector Levers
-    daily_event_count: Optional[int] = None
-    unique_user_base: Optional[int] = None
-    daily_order_count: Optional[int] = None
-    avg_order_value: Optional[float] = None
-    product_catalog_size: Optional[int] = None
-    avg_ctr: Optional[float] = None
-    ad_group_count: Optional[int] = None
-    sponsored_product_ratio: Optional[float] = None
+    # Standard Levers with defaults to prevent NoneType errors in generators
+    daily_spend_mean: float = 100.0
+    campaign_count: int = 5
+    cpc_mean: float = 1.2
+    daily_orders_mean: float = 15.0
+    aov_mean: float = 75.0
+    product_count: int = 50
+    organic_traffic_ratio: float = 0.4
+    conversion_rate: float = 0.03
+    # Connector Specific Levers
+    daily_event_count: int = 1000
+    unique_user_base: int = 5000
+    daily_order_count: int = 20
+    avg_order_value: float = 65.0
+    product_catalog_size: int = 100
+    avg_ctr: float = 0.015
+    ad_group_count: int = 8
+    sponsored_product_ratio: float = 0.25
 
 class TableConfig(BaseModel):
     name: str
@@ -33,20 +34,23 @@ class SourceConfig(BaseModel):
     tables: List[TableConfig] = []
 
 class SourceRegistry(BaseModel):
+    # Paid Ads
     facebook_ads: SourceConfig = SourceConfig()
     google_ads: SourceConfig = SourceConfig()
-    stripe: SourceConfig = SourceConfig()
-    shopify: SourceConfig = SourceConfig()
-    # New Sources
     linkedin_ads: SourceConfig = SourceConfig()
     bing_ads: SourceConfig = SourceConfig()
     amazon_ads: SourceConfig = SourceConfig()
-    amplitude: SourceConfig = SourceConfig()
-    mixpanel: SourceConfig = SourceConfig()
+    tiktok_ads: SourceConfig = SourceConfig()
+    instagram_ads: SourceConfig = SourceConfig()
+    # Ecommerce
+    shopify: SourceConfig = SourceConfig()
     woocommerce: SourceConfig = SourceConfig()
     bigcommerce: SourceConfig = SourceConfig()
+    # Analytics
+    amplitude: SourceConfig = SourceConfig()
+    mixpanel: SourceConfig = SourceConfig()
     google_analytics: SourceConfig = SourceConfig()
-    instagram_ads: SourceConfig = SourceConfig()
+    # STRIPE REMOVED PER REQUEST
 
 class TenantConfig(BaseModel):
     slug: str
