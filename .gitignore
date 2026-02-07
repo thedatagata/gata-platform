@@ -22,3 +22,6 @@ dbt_packages
 target
 .user.yml
 data/
+
+sandbox.duckdb
+sandbox.db
