@@ -77,9 +77,10 @@ def ensure_master_model_exists(master_model_id, source_platform, object_name):
 
 SELECT 
     CAST(NULL AS VARCHAR) as tenant_slug,
-    CAST(NULL AS VARCHAR) as hub_key,
+    CAST(NULL AS VARCHAR) as tenant_skey,
     CAST(NULL AS VARCHAR) as source_platform,
     CAST(NULL AS VARCHAR) as source_schema_hash,
+    CAST(NULL AS JSON) as source_schema,
     CAST(NULL AS JSON) as raw_data_payload,
     CAST(NULL AS TIMESTAMP) as loaded_at
 WHERE 1=0
@@ -115,20 +116,22 @@ def generate_scaffolding(tenant_slug, target, registry_schema='main'):
             stg_path = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / source_name / stg_filename
             stg_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Staging Model Template with Hardcoded Push
+    # Staging Model Template with Hardcoded Push
+            source_category_key = source_name # Alias for clarity as per architecture doc
             stg_content = f"""
 {{{{ config(materialized='view') }}}}
 
 SELECT
     '{tenant_slug}'::VARCHAR as tenant_slug,
-    {{{{ generate_tenant_key("'{tenant_slug}'") }}}} as hub_key,
-    '{source_name}'::VARCHAR as source_platform,
+    {{{{ generate_tenant_key("'{tenant_slug}'") }}}} as tenant_skey,
+    '{source_category_key}'::VARCHAR as source_platform,
     '{schema_hash}'::VARCHAR as source_schema_hash,
+    CAST(NULL AS JSON) as source_schema,
+    -- Pass payload as complex type for sync macro
     raw_data_payload,
     current_timestamp as loaded_at
 FROM {{{{ source('{tenant_slug}_{source_name}', '{phys_table}') }}}}
 
--- HARDCODED PUSH: Direct merge into designated immutable sink
 {{% do sync_to_master_hub('{master_model_id}') %}}
 """
             with open(stg_path, "w") as f:
