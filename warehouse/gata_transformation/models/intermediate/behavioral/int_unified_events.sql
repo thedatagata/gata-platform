@@ -44,5 +44,11 @@ SELECT
         ELSE to_timestamp(event_timestamp_raw / 1000) -- millis
     END as event_timestamp,
     
-    {{ gen_tenant_key(['source_platform', 'session_id', 'event_timestamp_raw']) }} as event_key
+    {{ gen_tenant_key(['source_platform', 'session_id', 'event_timestamp_raw']) }} as event_key,
+    
+    -- Attribution Extraction (Enrichment)
+    {{ extract_utm('page_location', 'utm_source') }} as utm_source,
+    {{ extract_utm('page_location', 'utm_medium') }} as utm_medium,
+    {{ extract_utm('page_location', 'utm_campaign') }} as utm_campaign
+    
 FROM hydrated
