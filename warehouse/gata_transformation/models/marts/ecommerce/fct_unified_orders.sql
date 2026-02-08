@@ -3,6 +3,9 @@ WITH orders AS (
 ),
 users AS (
     SELECT * FROM {{ ref('dim_users') }}
+),
+sessions AS (
+    SELECT * FROM {{ ref('fct_sessions') }}
 )
 
 SELECT
@@ -26,13 +29,38 @@ SELECT
     u.user_id as resolved_user_id,
     o.email,
     
-    -- Attribution Placeholder (simplistic)
-    -- If we had a session_id on the order, we'd join fct_sessions.
-    -- For now, exposing landing_site for potential regex parsing.
-    o.landing_site,
+    -- Attribution Linkage
+    -- Find the most recent session for this user before the order
+    s.session_key as attribution_session_key,
+    s.session_source as attribution_source,
+    s.session_medium as attribution_medium,
+    s.session_campaign as attribution_campaign,
     
+    o.landing_site, 
     o.loaded_at
+
 FROM orders o
 LEFT JOIN users u 
     ON o.tenant_slug = u.tenant_slug 
     AND (o.email = u.email OR o.customer_id = u.source_user_id)
+
+-- Attribution Join: Lateral join or aggressive filtering required for "most recent before"
+-- DuckDB supports ASOF joins or we can use a window function approach.
+-- For simplicity and standard SQL compatibility in dbt:
+LEFT JOIN (
+    SELECT 
+        s.resolved_user_id,
+        s.session_key,
+        s.session_source,
+        s.session_medium,
+        s.session_campaign,
+        s.session_start_at,
+        s.session_end_at,
+        s.tenant_slug
+    FROM sessions s
+) s ON o.tenant_slug = s.tenant_slug 
+   AND u.user_id = s.resolved_user_id
+   AND s.session_start_at <= o.created_at
+   AND s.session_start_at >= o.created_at - INTERVAL '30 days' -- Attribution Window
+   
+QUALIFY ROW_NUMBER() OVER (PARTITION BY o.id ORDER BY s.session_start_at DESC) = 1
