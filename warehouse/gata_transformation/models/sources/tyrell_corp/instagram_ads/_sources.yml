@@ -3,6 +3,8 @@ sources:
   name: tyrell_corp_instagram_ads
   schema: tyrell_corp
   tables:
-  - name: raw_tyrell_corp_instagram_ads_campaigns
+  - name: raw_tyrell_corp_instagram_ads_facebook_insights
   - name: raw_tyrell_corp_instagram_ads_ads
+  - name: raw_tyrell_corp_instagram_ads_ad_sets
+  - name: raw_tyrell_corp_instagram_ads_campaigns
 version: 2

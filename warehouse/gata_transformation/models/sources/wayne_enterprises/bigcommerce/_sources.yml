@@ -1,0 +1,8 @@
+sources:
+- database: my_db
+  name: wayne_enterprises_bigcommerce
+  schema: wayne_enterprises
+  tables:
+  - name: raw_wayne_enterprises_bigcommerce_orders
+  - name: raw_wayne_enterprises_bigcommerce_products
+version: 2

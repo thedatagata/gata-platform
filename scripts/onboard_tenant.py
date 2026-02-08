@@ -10,15 +10,12 @@ import yaml
 # --- Path & Service Setup ---
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DBT_PROJECT_DIR = PROJECT_ROOT / "warehouse" / "gata_transformation" 
-
-# FIX: Ensure orchestrator is discoverable
 sys.path.append(str(PROJECT_ROOT / "services" / "mock-data-engine"))
 
 from orchestrator import MockOrchestrator
 from config import load_manifest
 
 def load_env_file():
-    """Loads environment variables from the .env file at the project root."""
     env_path = PROJECT_ROOT / ".env"
     if env_path.exists():
         with open(env_path, "r") as f:
@@ -31,7 +28,6 @@ def load_env_file():
 load_env_file()
 
 def get_db_connection(target='dev'):
-    """Aligns connection with profiles.yml."""
     if target == 'local':
         return duckdb.connect(str(PROJECT_ROOT / "warehouse" / "sandbox.duckdb"))
     token = os.environ.get("MOTHERDUCK_TOKEN")
@@ -39,7 +35,6 @@ def get_db_connection(target='dev'):
     return con
 
 def calculate_dlt_schema_hash(dlt_schema: dict, table_name: str) -> str:
-    """Calculates DNA from physical RELATIONAL columns."""
     table_meta = dlt_schema.get('tables', {}).get(table_name, {})
     columns = table_meta.get('columns', {})
     sorted_cols = sorted([
@@ -51,7 +46,6 @@ def calculate_dlt_schema_hash(dlt_schema: dict, table_name: str) -> str:
     return hashlib.md5(signature.encode('utf-8')).hexdigest()
 
 def lookup_master_model(schema_hash: str, target: str = 'dev') -> str:
-    """Queries registry for hard-wired routing."""
     con = get_db_connection(target)
     try:
         query = f"SELECT master_model_id FROM main.connector_blueprints WHERE source_schema_hash = '{schema_hash}' LIMIT 1"
@@ -61,7 +55,6 @@ def lookup_master_model(schema_hash: str, target: str = 'dev') -> str:
         con.close()
 
 def generate_sources_yml(tenant_slug, source_name, tables):
-    """Automates source definitions for compilation."""
     src_dir = DBT_PROJECT_DIR / "models" / "sources" / tenant_slug / source_name
     src_dir.mkdir(parents=True, exist_ok=True)
     source_cfg = {
@@ -75,7 +68,6 @@ def generate_sources_yml(tenant_slug, source_name, tables):
         yaml.dump(source_cfg, f, default_flow_style=False)
 
 def generate_scaffolding(tenant_slug, target, days=30):
-    """Onboards tenant via relational discovery and macro-driven bundling."""
     manifest = load_manifest(str(PROJECT_ROOT / "tenants.yaml"))
     tenant_config = next((t for t in manifest.tenants if t.slug == tenant_slug), None)
 
@@ -83,7 +75,7 @@ def generate_scaffolding(tenant_slug, target, days=30):
         print(f"❌ Tenant {tenant_slug} not found.")
         return
 
-    # 1. LAND DATA (FLATTENED)
+    # 1. LAND DATA
     print(f"📡 Loading mock data for {tenant_slug}...")
     orchestrator = MockOrchestrator(tenant_config, days=days, credentials='motherduck' if target != 'local' else 'duckdb')
     dlt_schema_dict = orchestrator.run() 
@@ -91,31 +83,48 @@ def generate_scaffolding(tenant_slug, target, days=30):
     # 2. GENERATE DBT MODELS DYNAMICALLY
     tenant_prefix = f"raw_{tenant_slug}_"
     processed_sources = {}
+    
+    # Standard source list to prevent parsing errors
+    registry_keys = [
+        'facebook_ads', 'google_ads', 'linkedin_ads', 'bing_ads', 'amazon_ads', 
+        'tiktok_ads', 'instagram_ads', 'shopify', 'woocommerce', 'bigcommerce', 
+        'amplitude', 'mixpanel', 'google_analytics'
+    ]
 
     for table_name in dlt_schema_dict.get('tables', {}).keys():
-        if not table_name.startswith(tenant_prefix): continue
+        if not table_name.startswith(tenant_prefix) or "_dlt" in table_name: continue
         
-        # Parse identity
-        parts = table_name.replace(tenant_prefix, "").split("_")
-        source_name = "_".join(parts[:-1]) 
-        if source_name not in processed_sources: 
-            processed_sources[source_name] = []
-        processed_sources[source_name].append(table_name)
+        # Robust Parsing: Remainder = shopify_orders
+        remainder = table_name[len(tenant_prefix):]
+        matched_source = None
+        for s in registry_keys:
+            if remainder.startswith(s + "_"):
+                matched_source = s
+                break
+        
+        if not matched_source: continue
+        
+        object_name = remainder[len(matched_source)+1:]
+        
+        if matched_source not in processed_sources: 
+            processed_sources[matched_source] = []
+        processed_sources[matched_source].append(table_name)
 
         # Unique Routing
         schema_hash = calculate_dlt_schema_hash(dlt_schema_dict, table_name)
         master_model_id = lookup_master_model(schema_hash, target)
         
         if master_model_id == 'unknown':
-            print(f"⚠️  DNA {schema_hash[:8]} not registered for {table_name}. Skipping.")
+            print(f"⚠️ DNA {schema_hash[:8]} unknown for {table_name}. Skipping.")
             continue
 
-        # 3. Macro-Driven Bundling
-        stg_dir = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / source_name
+        # 3. Create Staging Pusher
+        stg_dir = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / matched_source
         stg_dir.mkdir(parents=True, exist_ok=True)
-        stg_filename = f"stg_{tenant_slug}__{source_name}_{parts[-1]}.sql"
+        stg_filename = f"stg_{tenant_slug}__{matched_source}_{object_name}.sql"
         
-        stg_content = f"{{{{ generate_staging_pusher(tenant_slug='{tenant_slug}', source_name='{source_name}', schema_hash='{schema_hash}', master_model_id='{master_model_id}', source_table='{table_name}') }}}}"
+        # Use physical table_name in the macro call to avoid double-prefixing
+        stg_content = f"{{{{ generate_staging_pusher(tenant_slug='{tenant_slug}', source_name='{matched_source}', schema_hash='{schema_hash}', master_model_id='{master_model_id}', source_table='{table_name}') }}}}"
         
         with open(stg_dir / stg_filename, "w") as f:
             f.write(stg_content.strip())

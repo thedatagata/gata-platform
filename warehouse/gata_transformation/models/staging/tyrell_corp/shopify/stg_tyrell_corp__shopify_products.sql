@@ -1,1 +1,1 @@
-{{ generate_staging_pusher(tenant_slug='tyrell_corp', source_name='shopify', schema_hash='2ff7799b929844ee686bbcf08bc1fdc3', master_model_id='shopify_api_v1_products', source_table='raw_tyrell_corp_shopify_products') }}
+{{ generate_staging_pusher(tenant_slug='tyrell_corp', source_name='shopify', schema_hash='483447f92cf2e6809991ad6945a94109', master_model_id='shopify_api_v1_products', source_table='raw_tyrell_corp_shopify_products') }}

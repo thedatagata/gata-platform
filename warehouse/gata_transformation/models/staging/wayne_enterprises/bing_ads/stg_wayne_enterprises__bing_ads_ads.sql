@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='wayne_enterprises', source_name='bing_ads', schema_hash='f13ad23288324f373af1ad59c205da2e', master_model_id='bing_ads_api_v1_ads', source_table='raw_wayne_enterprises_bing_ads_ads') }}
