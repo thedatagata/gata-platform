@@ -12,9 +12,11 @@ SELECT
     {{ extract_field('currency') }},
     {{ extract_field('created_at', 'timestamp') }},
     {{ extract_field('financial_status') }} as status,
+    
     -- Identifiers for Identity/Session Linking
     {{ extract_field('email') }},
-    {{ extract_field('user_id') }} as customer_id,
+    {{ extract_field('customer_id') }}, -- Added per refinement plan (might be user_id in some raw data, keeping consistent with request)
+    {{ extract_field('user_id') }}, -- Some sources use user_id
     {{ extract_field('browser_ip') }},
     {{ extract_field('landing_site') }}
 FROM base
