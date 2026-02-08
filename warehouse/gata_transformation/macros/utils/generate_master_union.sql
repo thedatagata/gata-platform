@@ -25,6 +25,16 @@
              'platform_mm__google_ads_api_v1_ad_performance',
              'platform_mm__bing_ads_api_v1_account_performance_report', 
              'platform_mm__linkedin_ads_api_v1_ad_analytics_by_campaign'
+        ],
+        'events': [
+             'platform_mm__google_analytics_api_v1_events',
+             'platform_mm__amplitude_api_v1_events',
+             'platform_mm__mixpanel_api_v1_events'
+        ],
+        'users': [
+             'platform_mm__amplitude_api_v1_users',
+             'platform_mm__mixpanel_api_v1_people',
+             'platform_mm__google_ads_api_v1_customers'
         ]
     } -%}
 
