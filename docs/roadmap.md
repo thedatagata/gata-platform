@@ -1,183 +1,118 @@
-# Roadmap
+Based on an audit of your current project state, the **Thin Master Model**
+architecture is successfully established. Your staging pushers are already
+packing physical source data into the `raw_data_payload` JSON column via the
+`generate_staging_pusher` macro.
 
-## Phase 1: The Universal Intermediate Layer (Week 1)
+To move forward, the roadmap must focus on a **Dynamic Transformation Factory**.
+This factory will "hydrate" the thin records by applying the current logic
+(filters, renames, case statements) defined in your `TenantConfig` to the
+historical data pooled in the hubs.
 
-**Goal**: Transform the raw_data_payload JSON from your Master Models into
-typed, unified Intermediate models.
+# Revised Roadmap: The Dynamic Transformation Factory
 
-### 1.1. Create Universal Extraction Macros
+## Phase 1: The Standardized Intermediate Layer (Week 1)
 
-Instead of writing `raw_data_payload->>'$.field'` in every model, create a macro
-that handles the nuances of your JSON structure.
+**Goal**: Isolate tenant-platform data from the Master Model hubs and transform
+JSON payloads into typed, domain-aligned records while applying the logic
+config.
 
-**File**: `macros/extract_json_field.sql`
+### 1.1. Universal Extraction & Logic Macros
+
+Instead of manual JSON pathing, standardized macros will handle field extraction
+and the injection of tenant-specific logic (e.g., "filter where campaign matches
+X").
+
+**File**: `macros/extract_json.sql`
 
 ```sql
-{% macro extract_field(column_name, json_path, target_type='string') %}
-    (raw_data_payload->>'$.{{ json_path }}')::{{ target_type }} as {{ column_name }}
+{% macro extract_field(column_name, target_type='string') %}
+    (raw_data_payload->>'$.{{ column_name }}')::{{ target_type }} as {{ column_name }}
 {% endmacro %}
 ```
 
-### 1.2. Build the Universal Fact Engines
+**File**: `macros/apply_tenant_logic.sql` This uses your existing
+`get_client_logic` macro to dynamically apply filters from `tenants.yaml`.
 
-These models union all Master Model sources for a specific entity (e.g., Orders)
-using your Relational DNA registry.
+### 1.2. The Unified Domain Hydrators
 
-**File**: `models/intermediate/ecommerce/int_unified_orders.sql`
+These models union all Master Model hubs for a specific entity (e.g.,
+Performance) and prepare them for the Star Schema by applying the "Logic
+Injection."
+
+**File**: `models/intermediate/paid_ads/int_unified_ad_performance.sql`
 
 ```sql
--- This model dynamically unions all relations registered to the 'order' master model
-{% set relations = dbt_utils.get_relations_by_prefix(
-    schema=target.schema, 
-    prefix='platform_mm__', 
-    exclude='%products%'
-) %}
+{{ config(materialized='view') }}
 
-WITH base_orders AS (
-    {% for rel in relations %}
+WITH master_hub AS (
+    -- Dynamically union all hubs matching the 'ad_performance' master_model_id
+    {{ generate_master_union('paid_ads_api_v1_ad_performance') }}
+),
+
+hydrated AS (
     SELECT 
         tenant_slug,
         source_name,
-        {{ extract_field('order_id', 'id') }},
-        {{ extract_field('total_amount', 'total_price', 'float') }},
-        {{ extract_field('currency', 'currency') }},
-        {{ extract_field('ordered_at', 'created_at', 'timestamp') }},
-        raw_data_payload->'$.customer' as customer_raw -- Keep sub-JSON for Dim joining
-    FROM {{ rel }}
-    {% if not loop.last %} UNION ALL {% endif %}
-    {% endfor %}
+        {{ extract_field('date_start', 'date') }},
+        {{ extract_field('campaign_id') }},
+        {{ extract_field('spend', 'double') }},
+        {{ extract_field('impressions', 'bigint') }},
+        -- Apply the logic configuration for filtering and custom case statements
+        {{ apply_tenant_logic(tenant_slug, source_name, 'ad_performance') }}
+    FROM master_hub
 )
-SELECT * FROM base_orders
+SELECT * FROM hydrated
 ```
 
-**Architectural Decision**: Should we keep the raw JSON in the Intermediate
-layer?
+## Phase 2: The Star Schema Factory (Week 2)
 
-**Decision**: Yes. Store complex objects (like `customer_raw`) as JSON columns.
-This allows downstream "Dimension Engines" to extract user data without needing
-separate ingestion paths.
+**Goal**: Materialize the final "Gold" layer facts and dimensions, orchestrated
+by a factory that joins data based on the tenant's active source mix.
 
-## Phase 2: The Star Schema & dlt Runner Integration (Week 2)
+### 2.1. Dimension Engine
 
-**Goal**: Materialize per-tenant Star Schemas and use the dlt dbt runner to
-capture full lineage.
+Build standardized dimensions (e.g., `dim_campaigns`, `dim_products`) by
+extracting attributes from the hub records.
 
-### 2.1. Define the Star Schema (Gold Layer)
+### 2.2. Mart Factory
 
-Create the final Fact and Dimension tables that the app frontend will query.
+A dbt model that acts as the "Star Schema Assembly Line," automatically joining
+facts to dimensions using surrogate keys.
 
-**File**: `models/marts/fct_orders.sql`
+**File**: `models/marts/fct_ad_performance.sql`
 
 ```sql
-SELECT
-    {{ dbt_utils.generate_surrogate_key(['tenant_slug', 'order_id']) }} as order_key,
-    tenant_slug,
-    source_name,
-    order_id,
-    total_amount,
-    ordered_at,
-    -- Simple attribution logic from GA4 data if joined here
-    source_name as channel
-FROM {{ ref('int_unified_orders') }}
+SELECT 
+    {{ dbt_utils.generate_surrogate_key(['tenant_slug', 'platform', 'campaign_id']) }} as campaign_key,
+    f.*,
+    d.campaign_name,
+    d.objective
+FROM {{ ref('int_unified_ad_performance') }} f
+LEFT JOIN {{ ref('int_unified_campaigns') }} d 
+    USING (tenant_slug, platform, campaign_id)
 ```
 
-### 2.2. Implement the dlt dbt Runner
+## Phase 3: DLT Workspace & Semantic Ingestion (Week 3)
 
-Update `mock-data-engine/main.py` to replace the subprocess call with the native
-dlt dbt runner. This links the ingestion load_id to the transformation models,
-providing end-to-end lineage.
+**Goal**: Fully automate the execution loop using dlt's workspace features and
+populate the Boring Semantic Layer (BSL) with Star Schema metadata.
 
-**File**: `mock-data-engine/main.py` (Update Step 3)
+### 3.1. DLT DBT Runner Integration
 
-```python
-import dlt
+Update `mock-data-engine/main.py` to use `dlt.dbt.package`. This captures full
+lineage from the ingestion load_id through to your final mart materialization.
 
-def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str = None):
-    # ... (Existing Ingestion logic) ...
+### 3.2. Star-Layer BSL Generation
 
-    # 3. RUN DBT VIA DLT RUNNER
-    pipeline = dlt.pipeline(pipeline_name=f'transform_{tenant_slug}', destination='motherduck')
-    
-    dbt = dlt.dbt.package(
-        pipeline,
-        "warehouse/gata_transformation",
-        target_name=target
-    )
-    
-    # Run only models relevant to the current tenant for speed
-    results = dbt.run_all(vars={'tenant_slug': tenant_slug})
-    
-    for m in results:
-        print(f"Model {m.model_name} materialized in {m.time}s")
-```
-
-## Phase 3: AI-Ready Semantic Layer & API (Week 3)
-
-**Goal**: Automatically populate the Boring Semantic Layer (BSL) from your Star
-Schema and expose it to an LLM via API.
-
-### 3.1. Create the "High-Fidelity" BSL Factory
-
-Update `utils/bsl_mapper.py` to target your Gold layer (`fct_`, `dim_`) rather
-than the raw `raw_` tables. This ensures the LLM queries clean, business-ready
-data.
-
-**File**: `mock-data-engine/utils/bsl_mapper.py`
-
-```python
-def generate_star_bsl(con, tenant_slug: str):
-    """Generates BSL Manifest specifically for the Star Schema."""
-    manifest = {"models": []}
-    
-    # Inspect physical DuckDB tables
-    star_tables = con.sql("SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'fct_%'").fetchall()
-    
-    for table_name in star_tables:
-        model = {
-            "name": table_name[0],
-            "dimensions": ["ordered_at", "channel"],
-            "measures": [
-                {"name": "total_revenue", "expr": "sum(total_amount)", "label": "Total Revenue"}
-            ]
-        }
-        manifest["models"].append(model)
-        
-    return manifest
-```
-
-### 3.2. Deploy the Natural Language API
-
-Create a FastAPI service that uses the Model Context Protocol (MCP) to allow an
-LLM to query your BSL.
-
-**File**: `services/api/main.py` (Conceptual)
-
-```python
-from fastapi import FastAPI
-from boring_semantic_layer import SemanticLayer
-
-app = FastAPI()
-
-@app.post("/ask")
-async def ask_data(tenant_slug: str, question: str):
-    # 1. Load the BSL Manifest from your warehouse satellite
-    # 2. Inject Manifest into LLM Prompt
-    # 3. LLM returns Ibis expression (not SQL) based on your metrics
-    # 4. Execute and return results
-    return {"answer": results}
-```
+Update the `generate_boring_manifest` utility to target `fct_` and `dim_`
+tables. Since the Star Schema is now standardized, the LLM will interact with a
+consistent interface across all tenants.
 
 ## Critical Success Milestones
 
-- **End of Week 1**: You can run `dbt run` and see a `unified_orders` table that
-  combines Shopify and BigCommerce data into a single schema.
-- **End of Week 2**: Your `main.py` run populates the `_dlt_loads` table with
-  dbt model statuses, proving full lineage.
-- **End of Week 3**: You can send a JSON payload to your API and receive a
-  calculated "Total Revenue" numeric value derived from the Star Schema BSL.
-
-### The "Job-Winning" Pivot
-
-When you present this, emphasize that you didn't build a dashboard—you built an
-**Autonomous Semantic Engine** where the LLM is constrained by the BSL to
-prevent SQL hallucinations.
+- **End of Week 1**: You can change a filter in `tenants.yaml`, run dbt, and see
+  those records excluded from the hydrated intermediate models immediately.
+- **End of Week 2**: A single surrogate key correctly links performance data
+  from Google Ads and Facebook Ads for `tyrell_corp`.
+- **End of Week 3**: The `onboard_tenant.py` script triggers a dlt workspace
+  run, creating the Star Schema and updating the BSL manifest in one step.

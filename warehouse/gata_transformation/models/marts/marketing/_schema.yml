@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: fct_unified_ad_performance
+    description: "Unified ad performance fact table joined with campaigns."
+    columns:
+      - name: campaign_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_unified_campaigns')
+              field: entity_key
+
+  - name: fct_unified_orders
+    description: "Unified orders fact table."
+    columns:
+      - name: order_id
+        tests:
+          - not_null
