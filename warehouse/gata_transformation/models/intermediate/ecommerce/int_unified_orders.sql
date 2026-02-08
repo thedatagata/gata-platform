@@ -11,5 +11,10 @@ SELECT
     {{ extract_field('total_price', 'double') }},
     {{ extract_field('currency') }},
     {{ extract_field('created_at', 'timestamp') }},
-    {{ extract_field('financial_status') }} as status
+    {{ extract_field('financial_status') }} as status,
+    -- Identifiers for Identity/Session Linking
+    {{ extract_field('email') }},
+    {{ extract_field('user_id') }} as customer_id,
+    {{ extract_field('browser_ip') }},
+    {{ extract_field('landing_site') }}
 FROM base

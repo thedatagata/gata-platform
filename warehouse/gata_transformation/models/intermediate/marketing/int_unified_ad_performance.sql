@@ -5,6 +5,7 @@ WITH base AS (
 hydrated AS (
     SELECT 
         tenant_slug,
+        source_name,
         source_platform,
         tenant_skey,
         loaded_at,
@@ -19,6 +20,11 @@ hydrated AS (
 SELECT 
     *,
     {{ gen_tenant_key(['source_platform', 'campaign_id']) }} as campaign_key
+    
+    -- Inject Custom Calculations (e.g. CPM, ROI) defined in tenants.yaml
+    -- apply_tenant_logic will inject ", formula as alias"
+    {{ apply_tenant_logic(tenant_slug, source_name, 'ad_performance', 'calculation') }}
+    
 FROM hydrated
 WHERE 1=1
 {{ apply_tenant_logic(tenant_slug, source_name, 'ad_performance', 'filter') }}
