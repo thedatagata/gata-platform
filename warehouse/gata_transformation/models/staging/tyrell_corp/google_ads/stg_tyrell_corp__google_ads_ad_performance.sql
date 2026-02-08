@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='tyrell_corp', source_name='google_ads', schema_hash='61a877ed9b7b763480640641593eea14', master_model_id='google_ads_api_v1_ad_performance', source_table='raw_tyrell_corp_google_ads_ad_performance') }}

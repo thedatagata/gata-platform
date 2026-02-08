@@ -1,19 +1,20 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 class BigCommerceProduct(BaseModel):
     id: Optional[int] = None
     name: Optional[str] = None
     sku: Optional[str] = None
     price: Optional[float] = None
-    availability: Optional[str] = None
+    availability: Optional[str] = "available"
 
 class BigCommerceOrder(BaseModel):
     id: Optional[int] = None
-    status_id: Optional[int] = None
-    total_inc_tax: Optional[float] = None
-    total_ex_tax: Optional[float] = None # Added for consistency
-    subtotal_ex_tax: Optional[float] = None # Added for consistency
+    status: Optional[str] = None 
+    status_id: Optional[int] = None 
+    total_price: Optional[float] = None 
+    currency: Optional[str] = "USD"
     customer_id: Optional[int] = None
-    date_created: Optional[str] = None
     staff_notes: Optional[str] = None
+    created_at: Optional[datetime] = None 

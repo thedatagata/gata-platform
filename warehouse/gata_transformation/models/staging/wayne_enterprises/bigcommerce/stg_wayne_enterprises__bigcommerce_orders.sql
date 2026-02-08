@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='wayne_enterprises', source_name='bigcommerce', schema_hash='a14eceb8a21426b27d600498e2bc62e1', master_model_id='bigcommerce_api_v1_orders', source_table='raw_wayne_enterprises_bigcommerce_orders') }}

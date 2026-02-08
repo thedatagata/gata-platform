@@ -1,46 +1,36 @@
-
 import polars as pl
 import numpy as np
 from faker import Faker
-from datetime import date, timedelta
+import random
 from typing import Dict, List, Any
 
 fake = Faker()
 
 def generate_mixpanel_data(tenant_slug: str, config: Any, days: int = 30) -> Dict[str, List[dict]]:
-    """
-    Generates Mixpanel data.
-    Objects: events, people (users)
-    """
-    n_users = config.unique_user_base or 1000
-    daily_events = config.daily_event_count or 5000
+    n_users = getattr(config, 'unique_user_base', 1000) or 1000
+    daily_events = getattr(config, 'daily_event_count', 50) or 50
     
-    # 1. People
     distinct_ids = [f"mp_user_{fake.uuid4()[:8]}" for _ in range(n_users)]
-    people_df = pl.DataFrame({
-        "$distinct_id": distinct_ids,
-        "$city": [fake.city() for _ in range(n_users)],
-        "$email": [fake.ascii_email() for _ in range(n_users)]
-    })
+    people = []
+    for uid in distinct_ids:
+        people.append({
+            "distinct_id": uid,
+            "city": fake.city(),
+            "email": fake.ascii_email()
+        })
 
-    # 2. Events ($export)
     event_names = ["Screen View", "Sign Up", "Purchase", "Button Click"]
-    total_events = daily_events * days
+    total_events = int(daily_events * days)
     
-    # Create simple event log
-    events_df = pl.DataFrame({
-        "event": np.random.choice(event_names, total_events),
-        "properties": [{
-            "distinct_id": np.random.choice(distinct_ids),
-            "time": int(fake.unix_time()),
-            "$browser": "Chrome"
-        } for _ in range(total_events)]
-    })
-    # Warning: Mixpanel schema is messy (nested props). Keeping it simple here.
-    # To facilitate dlt/duckdb loading, we might flatten properties or just keep as struct/json?
-    # For now, let's just make 'properties' a JSON string or dict. Dlt handles dicts.
+    events = []
+    for _ in range(total_events):
+        # MANUAL FLATTENING: Move keys from properties dict to top level
+        events.append({
+            "event": random.choice(event_names),
+            "prop_distinct_id": random.choice(distinct_ids),
+            "prop_time": int(fake.unix_time()),
+            "prop_browser": "Chrome",
+            "prop_city": fake.city()
+        })
 
-    return {
-        "events": events_df.to_dicts(),
-        "people": people_df.to_dicts()
-    }
+    return {"events": events, "people": people}

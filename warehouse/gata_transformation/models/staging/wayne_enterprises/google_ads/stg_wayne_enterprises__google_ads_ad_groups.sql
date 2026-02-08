@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='wayne_enterprises', source_name='google_ads', schema_hash='3015c99461df1c5e1642b976c780e078', master_model_id='google_ads_api_v1_ad_groups', source_table='raw_wayne_enterprises_google_ads_ad_groups') }}

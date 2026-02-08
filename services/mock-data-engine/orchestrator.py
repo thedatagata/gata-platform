@@ -1,24 +1,9 @@
 import dlt
 import polars as pl
 from typing import Dict, Any, List, Iterator
-import math
+from datetime import datetime
 
-# --- Pydantic Schema Imports for Data Contracts ---
-from schemas.meta_ads import MetaCampaign, MetaAdSet, MetaAd, MetaAdInsight
-from schemas.google_ads import GAdsCustomer, GAdsCampaign, GAdsAdGroup, GAdsAd, GAdsAdPerformance
-from schemas.google_analytics import GA4Event
-from schemas.linkedin_ads import LinkedInCampaign, LinkedInAdAnalytics
-from schemas.shopify import ShopifyProduct, ShopifyOrder
-from schemas.woocommerce import WooCommerceProduct, WooCommerceOrder
-# NEW SCHEMAS
-from schemas.bigcommerce import BigCommerceProduct, BigCommerceOrder
-from schemas.bing_ads import BingCampaign, BingAdGroup, BingAd, BingAccountPerformanceReport
-from schemas.tiktok_ads import TikTokCampaign, TikTokAdGroup, TikTokAd, TikTokAdReportDaily
-from schemas.amazon_ads import AmzSPCampaign, AmzSPAdGroup, AmzSPAd
-from schemas.amplitude import AmplitudeEvent, AmplitudeUser
-from schemas.mixpanel import MixpanelEvent, MixpanelPerson
-
-# --- Generator Imports ---
+# --- Standardized Generator Imports ---
 from sources.paid_ads.facebook_ads.fb_ads_data_generator import generate_facebook_data
 from sources.paid_ads.google_ads.google_ads_data_generator import generate_google_ads
 from sources.paid_ads.tiktok_ads.tiktok_ads_data_generator import generate_tiktok_data
@@ -34,114 +19,111 @@ from sources.product_analytics.amplitude.amplitude_data_generator import generat
 from sources.product_analytics.mixpanel.mixpanel_data_generator import generate_mixpanel_data
 
 class MockOrchestrator:
-    def __init__(self, config: Any, days: int = 30, credentials: str = None):
+    def __init__(self, config: Any, days: int = 90, credentials: str = None):
+        """Initializes with a default 90-day window for categorical density."""
         self.config = config
         self.days = days
         self.credentials = credentials
 
-    def _validate_source_mix(self):
-        if self.config.slug == 'library_sample': return
-        sources = self.config.sources
-        if not any(getattr(sources, s).enabled for s in ['shopify', 'woocommerce', 'bigcommerce']):
-            raise ValueError(f"Tenant '{self.config.slug}' must have an Ecommerce source.")
-        if not any(getattr(sources, s).enabled for s in ['google_analytics', 'amplitude', 'mixpanel']):
-            raise ValueError(f"Tenant '{self.config.slug}' must have an Analytics source.")
-        if not any(getattr(sources, s).enabled for s in ['facebook_ads', 'google_ads', 'tiktok_ads', 'linkedin_ads', 'bing_ads', 'amazon_ads', 'instagram_ads']):
-            raise ValueError(f"Tenant '{self.config.slug}' must have a Paid Ads source.")
-
     def run(self) -> Dict[str, Any]:
-        self._validate_source_mix()
-        destination = 'duckdb' if self.credentials == 'duckdb' else 'motherduck'
-        pipeline = dlt.pipeline(pipeline_name=f'mock_load_{self.config.slug}', destination=destination, dataset_name=self.config.slug)
+        """Orchestrates the ETL pipeline for tenant or library establish."""
+        destination = 'duckdb' if self.credentials and 'duckdb' in self.credentials else 'motherduck'
+        pipeline = dlt.pipeline(
+            pipeline_name=f'mock_load_{self.config.slug}', 
+            destination=destination, 
+            dataset_name=self.config.slug
+        )
+        
+        load_package = []
 
-        SCHEMA_MAP = {
-            'instagram_ads': {'campaigns': MetaCampaign, 'ad_sets': MetaAdSet, 'ads': MetaAd, 'facebook_insights': MetaAdInsight},
-            'facebook_ads': {'campaigns': MetaCampaign, 'ad_sets': MetaAdSet, 'ads': MetaAd, 'facebook_insights': MetaAdInsight},
-            'google_ads': {'customers': GAdsCustomer, 'campaigns': GAdsCampaign, 'ad_groups': GAdsAdGroup, 'ads': GAdsAd, 'ad_performance': GAdsAdPerformance},
-            'google_analytics': {'events': GA4Event},
-            'linkedin_ads': {'campaigns': LinkedInCampaign, 'ad_analytics': LinkedInAdAnalytics},
-            'shopify': {'products': ShopifyProduct, 'orders': ShopifyOrder},
-            'woocommerce': {'products': WooCommerceProduct, 'orders': WooCommerceOrder},
-            'bigcommerce': {'products': BigCommerceProduct, 'orders': BigCommerceOrder},
-            'bing_ads': {'campaigns': BingCampaign, 'ad_groups': BingAdGroup, 'ads': BingAd, 'account_performance_report': BingAccountPerformanceReport},
-            'tiktok_ads': {'campaigns': TikTokCampaign, 'ad_groups': TikTokAdGroup, 'ads': TikTokAd, 'ads_reports_daily': TikTokAdReportDaily},
-            'amazon_ads': {'sponsored_products_campaigns': AmzSPCampaign, 'sponsored_products_ad_groups': AmzSPAdGroup, 'sponsored_products_product_ads': AmzSPAd},
-            'amplitude': {'events': AmplitudeEvent, 'users': AmplitudeUser},
-            'mixpanel': {'events': MixpanelEvent, 'people': MixpanelPerson}
-        }
+        def create_table_etl(source_name: str, table_name: str, raw_data: List[dict]):
+            """Chains Extract, Transform, and Load stages for physical schema stability."""
+            full_table_name = f"raw_{self.config.slug}_{source_name}_{table_name}"
 
-        def load_source(source_name: str, data: Dict[str, List[dict]]):
-            for table_name, rows in data.items():
-                full_table_name = f"raw_{self.config.slug}_{source_name}_{table_name}"
-                model = SCHEMA_MAP.get(source_name, {}).get(table_name)
-                df = pl.DataFrame(rows)
-                
-                @dlt.resource(
-                    name=full_table_name, write_disposition='replace', columns=model,
-                    schema_contract={"tables": "evolve", "columns": "evolve", "data_type": "freeze"}
-                )
-                def paged_resource(chunk_size: int = 1000):
-                    n_chunks = math.ceil(len(df) / chunk_size)
-                    for i in range(n_chunks):
-                        yield df.slice(i * chunk_size, chunk_size).to_dicts()
+            @dlt.resource(name=f"{full_table_name}_extract", selected=False)
+            def extract():
+                """Stage 1: Load raw generator output into Polars."""
+                yield pl.DataFrame(raw_data)
 
-                pipeline.run(paged_resource())
-            return data
+            @dlt.transformer(data_from=extract, name=f"{full_table_name}_transform", selected=False)
+            def transform(df: pl.DataFrame):
+                """Stage 2: Bypass Arrow UTC/tzdata errors by casting dates to strings."""
+                dt_cols = [c for c, t in df.schema.items() if isinstance(t, (pl.Datetime, pl.Date))]
+                if dt_cols:
+                    df = df.with_columns([pl.col(c).cast(pl.String) for c in dt_cols])
+                return df
 
+            @dlt.transformer(data_from=transform, name=full_table_name, max_table_nesting=0)
+            def load(df: pl.DataFrame):
+                """Stage 3: Yield Arrow table for strict warehouse typing."""
+                yield df.to_arrow()
+
+            return load
+
+        # --- Generation & Collection Logic ---
         sources = self.config.sources
-        ad_campaigns_context = []
-        shopify_orders_context = []
+        ad_context, order_context = [], []
 
-        # Paid Ads
+        # 1. Paid Ads
         if sources.facebook_ads.enabled:
-            fb_raw = generate_facebook_data(self.config.slug, sources.facebook_ads.generation, self.days)
-            load_source('facebook_ads', fb_raw)
-            if 'campaigns' in fb_raw: ad_campaigns_context.extend(fb_raw['campaigns'])
+            raw = generate_facebook_data(self.config.slug, sources.facebook_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('facebook_ads', t, r))
+            ad_context.extend(raw.get('campaigns', []))
 
         if sources.google_ads.enabled:
-            gads_raw = generate_google_ads(self.config.slug, sources.google_ads.generation, self.days)
-            load_source('google_ads', gads_raw)
-            if 'campaigns' in gads_raw: ad_campaigns_context.extend(gads_raw['campaigns'])
+            raw = generate_google_ads(self.config.slug, sources.google_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('google_ads', t, r))
+            ad_context.extend(raw.get('campaigns', []))
 
         if sources.linkedin_ads.enabled:
-            load_source('linkedin_ads', generate_linkedin_data(self.config.slug, sources.linkedin_ads.generation, self.days))
+            raw = generate_linkedin_data(self.config.slug, sources.linkedin_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('linkedin_ads', t, r))
 
         if sources.bing_ads.enabled:
-            load_source('bing_ads', generate_bing_data(self.config.slug, sources.bing_ads.generation, self.days))
+            raw = generate_bing_data(self.config.slug, sources.bing_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('bing_ads', t, r))
 
         if sources.tiktok_ads.enabled:
-            load_source('tiktok_ads', generate_tiktok_data(self.config.slug, sources.tiktok_ads.generation, self.days))
+            raw = generate_tiktok_data(self.config.slug, sources.tiktok_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('tiktok_ads', t, r))
 
         if sources.instagram_ads.enabled:
-            load_source('instagram_ads', generate_instagram_data(self.config.slug, sources.instagram_ads.generation, self.days))
+            raw = generate_instagram_data(self.config.slug, sources.instagram_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('instagram_ads', t, r))
 
         if sources.amazon_ads.enabled:
-            load_source('amazon_ads', generate_amazon_data(self.config.slug, sources.amazon_ads.generation, self.days))
+            raw = generate_amazon_data(self.config.slug, sources.amazon_ads.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('amazon_ads', t, r))
 
-        # Ecommerce
+        # 2. Ecommerce
         if sources.shopify.enabled:
-            shopify_raw = generate_shopify_data(self.config.slug, sources.shopify.generation, [])
-            load_source('shopify', shopify_raw)
-            shopify_orders_context = shopify_raw.get('orders', [])
-
+            raw = generate_shopify_data(self.config.slug, sources.shopify.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('shopify', t, r))
+            order_context.extend(raw.get('orders', []))
         elif sources.woocommerce.enabled:
-            woo_raw = generate_woocommerce_data(self.config.slug, sources.woocommerce.generation, [], days=self.days)
-            load_source('woocommerce', woo_raw)
-            shopify_orders_context = woo_raw.get('orders', [])
-
+            raw = generate_woocommerce_data(self.config.slug, sources.woocommerce.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('woocommerce', t, r))
+            order_context.extend(raw.get('orders', []))
         elif sources.bigcommerce.enabled:
-            bc_raw = generate_bigcommerce_data(self.config.slug, sources.bigcommerce.generation, [], self.days)
-            load_source('bigcommerce', bc_raw)
-            shopify_orders_context = bc_raw.get('orders', [])
+            raw = generate_bigcommerce_data(self.config.slug, sources.bigcommerce.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('bigcommerce', t, r))
+            order_context.extend(raw.get('orders', []))
 
-        # Analytics
+        # 3. Analytics
         if sources.google_analytics.enabled:
-            load_source('google_analytics', generate_ga4_data(self.config.slug, sources.google_analytics.generation, shopify_orders_context, ad_campaigns_context))
+            raw = generate_ga4_data(self.config.slug, sources.google_analytics.generation, order_context, ad_context)
+            for t, r in raw.items(): load_package.append(create_table_etl('google_analytics', t, r))
 
-        elif sources.amplitude.enabled:
-            load_source('amplitude', generate_amplitude_data(self.config.slug, sources.amplitude.generation, self.days))
+        if sources.amplitude.enabled:
+            raw = generate_amplitude_data(self.config.slug, sources.amplitude.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('amplitude', t, r))
 
-        elif sources.mixpanel.enabled:
-            load_source('mixpanel', generate_mixpanel_data(self.config.slug, sources.mixpanel.generation, self.days))
+        if sources.mixpanel.enabled:
+            raw = generate_mixpanel_data(self.config.slug, sources.mixpanel.generation, self.days)
+            for t, r in raw.items(): load_package.append(create_table_etl('mixpanel', t, r))
 
+        # Atomic Run: Solves internal metadata NOT NULL issues.
+        if load_package:
+            pipeline.run(load_package)
+            
         return pipeline.default_schema.to_dict()

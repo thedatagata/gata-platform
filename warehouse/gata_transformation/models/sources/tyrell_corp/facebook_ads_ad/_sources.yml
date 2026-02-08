@@ -1,7 +1,0 @@
-sources:
-- database: my_db
-  name: tyrell_corp_facebook_ads_ad
-  schema: tyrell_corp
-  tables:
-  - name: raw_tyrell_corp_facebook_ads_ad_sets
-version: 2

@@ -1,7 +1,7 @@
 tenants:
   - slug: tyrell_corp
     business_name: "Tyrell Corporation"
-    status: onboarding
+    status: active
     sources:
       facebook_ads:
         enabled: true
@@ -9,16 +9,15 @@ tenants:
           daily_spend_mean: 3000.0
           campaign_count: 5
         tables:
-          - name: raw_tyrell_corp_facebook_ads_ads
+          - name: ads
             logic: {}
-          - name: raw_tyrell_corp_facebook_ads_ad_sets
+          - name: ad_sets
             logic: {}
-          - name: raw_tyrell_corp_facebook_ads_campaigns
+          - name: campaigns
             logic: {}
-          - name: raw_tyrell_corp_facebook_ads_facebook_insights
-            logic: {}
-        logic:
-          conversion_event_pattern: ""
+          - name: facebook_insights
+            logic:
+              conversion_event_pattern: "purchase" # Moved from source-level logic
       google_ads:
         enabled: true
         generation:
@@ -26,137 +25,106 @@ tenants:
           cpc_mean: 2.10
           campaign_count: 5
         tables:
-          - name: raw_tyrell_corp_google_ads_ads
+          - name: ads
             logic: {}
-          - name: raw_tyrell_corp_google_ads_ad_groups
+          - name: ad_groups
             logic: {}
-          - name: raw_tyrell_corp_google_ads_ad_performance
+          - name: ad_performance
             logic: {}
-          - name: raw_tyrell_corp_google_ads_campaigns
+          - name: campaigns
             logic: {}
-          - name: raw_tyrell_corp_google_ads_customers
+          - name: customers
             logic: {}
-        logic: {}
       instagram_ads:
         enabled: true
         generation:
           daily_spend_mean: 2000.0
           campaign_count: 5
         tables:
-          - name: raw_tyrell_corp_instagram_ads_ads
+          - name: ads
             logic: {}
-          - name: raw_tyrell_corp_instagram_ads_ad_sets
+          - name: ad_sets
             logic: {}
-          - name: raw_tyrell_corp_instagram_ads_campaigns
+          - name: campaigns
             logic: {}
-          - name: raw_tyrell_corp_instagram_ads_facebook_insights
-            logic: {}
-        logic:
-          conversion_event_pattern: ""
+          - name: facebook_insights
+            logic:
+              conversion_event_pattern: "purchase"
       shopify:
         enabled: true
         generation:
           product_count: 20
         tables:
-          - name: raw_tyrell_corp_shopify_orders
+          - name: orders
             logic: {}
-          - name: raw_tyrell_corp_shopify_products
+          - name: products
             logic: {}
-        logic: {}
       google_analytics:
         enabled: true
         generation:
           organic_traffic_ratio: 0.3
           conversion_rate: 0.02
         tables:
-          - name: raw_tyrell_corp_google_analytics_events
-            logic: {}
-        logic:
-          conversion_events:
-            - purchase
-          funnel_events:
-            session_start_step: session_start
-            view_item_step: view_item
-            add_to_cart_step: add_to_cart
-            begin_checkout_step: begin_checkout
-            purchase_step: purchase
+          - name: events
+            logic:
+              conversion_events: ["purchase"]
+              funnel_steps:
+                session_start: "session_start"
+                view_item: "view_item"
+                add_to_cart: "add_to_cart"
+                begin_checkout: "begin_checkout"
+                purchase: "purchase"
 
   - slug: wayne_enterprises
     business_name: "Wayne Enterprises"
-    status: active
+    status: onboarding
     sources:
+      bing_ads:
+        enabled: true
+        generation:
+          campaign_count: 5
+          daily_spend_mean: 300.0
+        tables:
+          - name: account_performance_report
+            logic: { goal: "lead_gen", target_cpa: 45.0 }
       google_ads:
         enabled: true
-        generation:
-          daily_spend_mean: 8000.0
-          cpc_mean: 3.50
-          campaign_count: 3
-        tables:
-          - name: raw_wayne_enterprises_google_ads_ads
-            logic: {}
-          - name: raw_wayne_enterprises_google_ads_ad_groups
-            logic: {}
-          - name: raw_wayne_enterprises_google_ads_ad_performance
-            logic: {}
-          - name: raw_wayne_enterprises_google_ads_campaigns
-            logic: {}
-          - name: raw_wayne_enterprises_google_ads_customers
-            logic: {}
-        logic: {}
-      google_analytics:
+      bigcommerce:
         enabled: true
         generation:
-          organic_traffic_ratio: 0.45
-          conversion_rate: 0.03
+          daily_order_count: 40
         tables:
-          - name: raw_wayne_enterprises_google_analytics_events
-            logic: {}
-        logic:
-          conversion_events:
-            - purchase
-            - generate_lead
-          funnel_events:
-            session_start_step: session_start
-            view_item_step: view_item
-            generate_lead_step: generate_lead
-      shopify:
-        enabled: true
-        generation:
-          product_count: 5
-          daily_orders_mean: 10.0
-        tables:
-          - name: raw_wayne_enterprises_shopify_orders
-            logic: {}
-          - name: raw_wayne_enterprises_shopify_products
-            logic: {}
-        logic: {}
-
-  - slug: stark_industries
-    business_name: "Stark Industries"
-    status: active # SET TO ONBOARDING FOR TEST
-    sources:
-      woocommerce:
-        enabled: true
-        generation:
-          daily_orders_mean: 25.0
-          product_count: 50
-        tables: # ADD TABLE DEFINITIONS
           - name: orders
             logic: {}
           - name: products
             logic: {}
-      google_analytics: # ADD REQUIRED ANALYTICS SOURCE
+      google_analytics:
+        enabled: true
+
+  - slug: stark_industries
+    business_name: "Stark Industries"
+    status: onboarding
+    sources:
+      facebook_ads:
         enabled: true
         generation:
-          organic_traffic_ratio: 0.5
+          campaign_count: 8
+        tables:
+          - name: facebook_insights
+            logic: { attribution_model: "last_click" }
+      instagram_ads:
+        enabled: true
+      woocommerce:
+        enabled: true
+        tables:
+          - name: orders
+            logic: {}
+          - name: products
+            logic: {}
+      mixpanel:
+        enabled: true
         tables:
           - name: events
             logic: {}
-      linkedin_ads:
-        enabled: true
-        generation:
-          daily_spend_mean: 1500.0
-          campaign_count: 5
-        tables:
-          - name: campaigns
+          - name: people
             logic: {}

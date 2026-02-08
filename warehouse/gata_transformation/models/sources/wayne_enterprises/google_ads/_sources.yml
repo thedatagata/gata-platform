@@ -1,0 +1,11 @@
+sources:
+- database: my_db
+  name: wayne_enterprises_google_ads
+  schema: wayne_enterprises
+  tables:
+  - name: raw_wayne_enterprises_google_ads_ad_performance
+  - name: raw_wayne_enterprises_google_ads_ads
+  - name: raw_wayne_enterprises_google_ads_ad_groups
+  - name: raw_wayne_enterprises_google_ads_campaigns
+  - name: raw_wayne_enterprises_google_ads_customers
+version: 2
