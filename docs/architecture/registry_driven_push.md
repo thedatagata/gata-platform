@@ -1,99 +1,111 @@
 # Registry-Driven Push Architecture
 
 This architectural document outlines the Registry-Driven Push Architecture, a
-contract-first design for a multi-tenant data platform. It is designed to
-decouple raw data storage from business logic, ensuring that the warehouse
-remains stable even as API versions or transformation requirements evolve.
+contract-first design for a multi-tenant data platform. It decouples raw data
+ingestion from business logic, ensuring warehouse stability through physical
+relational DNA and Pydantic data contracts.
 
 ## 1. Overall Architecture Overview
 
-The platform operates on a "Thin Master Model" principle:
+The platform operates on a "Physical Truth" principle:
 
-- **Intelligence resides in Metadata and Python**: Routing decisions and data
-  contract mapping happen during onboarding, not at dbt runtime.
-- **Immutable Sinks**: Master Models are multi-tenant table nodes that store
-  only raw payloads and structural metadata. They contain no logic.
-- **Active Staging**: Staging models act as "Pushers" that use an idempotent
-  MERGE to load data into their designated sinks.
-- **Dynamic Intermediate Layer**: Transformation logic (UTM rules, filters) is
-  applied by joining raw data to a versioned Table-Level Logic Satellite.
+- **Relational DNA Discovery**: Routing is determined by calculating an MD5 hash
+  of the physical column names and data types landed in the warehouse, creating
+  a unique structural fingerprint for every source object.
+- **Pydantic Data Contracts**: Python-native schemas serve as the source of
+  truth for the landing tables. By utilizing optional fields and "frozen" types,
+  the warehouse remains resilient to DuckDB/MotherDuck constraint limitations
+  while enforcing relational integrity.
+- **Active Staging (Pushers)**: Staging models are generated dynamically to act
+  as "Pushers." They re-bundle flattened relational data into a standardized
+  `raw_data_payload` JSON object for delivery to Master Models.
+- **Universal Intermediate Engines**: Intermediate models dynamically union all
+  Master Model sources for a specific entity (e.g., Orders) based on the
+  Relational DNA registry, creating a unified star schema for the platform.
+- **Boring Semantic Layer (BSL)**: A metadata-driven semantic layer is
+  automatically populated from the Star Schema to provide an AI-ready interface
+  for Natural Language Querying (NLQ).
 
 ## 2. Layer Responsibilities
 
-### Phase 1: The Library Layer (Contract Definition)
+### Phase 1: The Library Layer (DNA Definition)
 
-- **Responsible for defining the "DNA" of the platform.** It maps every unique
-  source table structure to a permanent logical destination.
-- **Responsibility**: Scan supported source schemas, calculate structural
-  hashes, and maintain the Master Model Registry.
+Responsible for defining the "DNA" of the platform. It maps unique source
+structures to permanent logical destinations.
 
-### Phase 2: The Orchestration Layer (Onboarding & Routing)
+- **Responsibility**: Scan supported source schemas, calculate structural DNA
+  hashes from physical relational columns, and maintain the
+  `connector_blueprints` registry.
 
-- **The "brain" of the operation.** It uses the Library to "wire" a new tenant's
-  data into the warehouse.
-- **Responsibility**: Scaffold staging shims, provision empty Master Sinks, and
-  hardcode the routing macro calls.
+### Phase 2: The Orchestration Layer (Onboarding & Discovery)
+
+The "brain" of the operation. It uses the Library to "wire" a new tenant's data
+into the warehouse.
+
+- **Responsibility**: Execute data landing, discover physical relational DNA,
+  and scaffold staging pushers hard-wired to the correct Master Model sinks.
 
 ### Phase 3: The Staging Layer (The Pushers)
 
-- **Active agents that normalize source data into a standard wrapper.**
-- **Responsibility**: Wrap raw records in JSON, calculate the tenant's current
-  schema hash, and execute the `sync_to_master_hub` macro.
+Active agents that normalize source data into a standard wrapper.
 
-### Phase 4: The Master Model Layer (Thin Multi-Tenant Sinks)
+- **Responsibility**: Re-bundle validated relational columns into a unified JSON
+  payload and execute the `generate_staging_pusher` macro to move data to the
+  multi-tenant sinks.
 
-- **The definitive source of truth for raw historical data across all tenants.**
-- **Responsibility**: Act as a permanent, immutable table shell for records
-  sharing a common data contract.
+### Phase 4: The Master Model Layer (Multi-Tenant Sinks)
 
-### Phase 5: The Metadata Layer (Logic History)
+The definitive source of truth for raw historical data across all tenants.
 
-- **Tracks the "intent" of transformations over time.**
-- **Responsibility**: Version individual table configurations (UTMs, logic
-  blocks) into unique hashes.
+- **Responsibility**: Act as an immutable table shell for records sharing a
+  common data contract (e.g., `platform_mm__shopify_api_v1_orders`).
+
+### Phase 5: The Semantic & Metadata Layer (Logic & Discovery)
+
+Tracks technical history and exposes business logic for AI consumption.
+
+- **Responsibility**: Version technical schema history in satellite tables and
+  generate BSL manifests to support accurate NLQ across the star schema.
 
 ## 3. Detailed File Responsibilities
 
-| File Category     | Primary File                                         | Responsibility                                                                                  |
-| :---------------- | :--------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
-| **Library**       | `scripts/initialize_connector_library.py`            | Calculates schema hashes and populates the `connector_blueprints` registry.                     |
-| **Orchestration** | `scripts/onboard_tenant.py`                          | Queries the registry, scaffolds "Thin Sink" Master Models, and generates "Push" Staging models. |
-| **Orchestration** | `mock-data-engine/orchestrator.py`                   | Enforces that every tenant must have a valid mix of Ecommerce, Analytics, and Ads sources.      |
-| **Push Macro**    | `macros/onboarding/sync_to_master_hub.sql`           | Performs the idempotent MERGE from Staging into the target Master Model.                        |
-| **Metadata**      | `satellites/platform_sat__tenant_config_history.sql` | Flattens the manifest to generate deterministic `logic_hash` values for individual tables.      |
-| **Sinks**         | `master_models/platform_mm__{id}.sql`                | Empty table shell nodes representing a specific data contract.                                  |
+| File Category     | Primary File                              | Responsibility                                                                                                  |
+| :---------------- | :---------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **Library**       | `scripts/initialize_connector_library.py` | Calculates DNA hashes from physical columns and populates the `connector_blueprints` registry.                  |
+| **Orchestration** | `scripts/onboard_tenant.py`               | Lands initial data, performs DNA discovery, and scaffolds dynamic Staging models.                               |
+| **Orchestration** | `mock-data-engine/orchestrator.py`        | Uses Polars for optimized extraction and enforces Pydantic schemas as stable data contracts.                    |
+| **Push Macro**    | `macros/generate_staging_pusher.sql`      | Performs the idempotent bundling and push from Staging into the target Master Model.                            |
+| **Metadata**      | `mock-data-engine/main.py`                | Persists dlt schema history and BSL manifests into `platform_sat__source_schema_history`.                       |
+| **Semantic**      | `mock-data-engine/utils/bsl_mapper.py`    | Auto-populates dimensions and measures for Rill and the Boring Semantic Layer API.                              |
+| **Contracts**     | `mock-data-engine/schemas/*.py`           | Enforces relational types (e.g., float for prices) while ensuring DuckDB compatibility through optional fields. |
 
 ## 4. Order of Operations for Building from Scratch
 
-To ensure stability and prevent "crawling" errors, the platform must be built in
-this specific sequence:
+1. **Initialize the Library**: Run `initialize_connector_library.py` to populate
+   `connector_blueprints`. This establishes the Relational DNA routing for all
+   13 supported sources.
+2. **Onboard Tenant**: Run `onboard_tenant.py` to land initial data and scaffold
+   staging pushers. This creates models hard-coded with DNA-verified routing.
+3. **Materialize Staging**: Run `dbt` to execute the pushers. Flattened source
+   data is re-bundled and moved into the Master Model multi-tenant sinks.
+4. **Execute Universal Engines**: Materialize intermediate models (e.g.,
+   `int_unified_orders`) that drain the Master Models into unified star schema
+   tables.
+5. **Register Semantic Manifests**: Run `main.py` to capture the final physical
+   schema, generate the BSL manifest for the star schema, and update the
+   metadata satellite.
 
-1. **Initialize the Library**: Run `initialize_connector_library.py` to create
-   the `connector_blueprints` table. This establishes the "Laws of Routing".
-2. **Implement the Push Macro**: Create `sync_to_master_hub.sql`. Staging cannot
-   exist without this macro.
-3. **Refactor the Onboarding Script**: Update `onboard_tenant.py` to use the
-   registry for lookups and the "Thin Sink" template for scaffolding.
-4. **Provision Master Sinks**: Run the onboarding script (or a reset script) to
-   create the empty multi-tenant table nodes.
-5. **Generate Staging Models**: Re-run onboarding for all tenants to generate
-   models with hardcoded `sync_to_master_hub` calls.
-6. **Build Metadata History**: Run `platform_sat__tenant_config_history` to
-   capture current logic hashes.
-7. **Data Ingestion**: Run the mock engine/DLT pipelines to land raw source
-   data.
-8. **Execute Transformation**: Run dbt. Staging models will "push" their data
-   into Master Models automatically.
+## 5. Guardrails for Stability
 
-## 5. Guardrails for Antigravity
-
-- **Rule 1**: Never use `graph.nodes` or `load_relation` to automate unions or
-  routing. Routing must be hardcoded in Python during onboarding.
-- **Rule 2**: Master Models must remain "Thin." They should never contain
-  business logic, `ref()` calls to hubs, or `UNION ALL` statements.
-- **Rule 3**: Idempotency is mandatory. All data flow from Staging to Master
-  Models must use the `MERGE` pattern on `tenant_slug`, `source_platform`, and
-  `md5(payload)`.
-- **Rule 4**: The Hub is obsolete. Do not attempt to refactor
-  `hub_tenant_sources.sql`; it must be deleted to maintain the direct-push
-  architecture.
+- **Rule 1: DNA-Based Routing**. Routing must be hard-coded in Python based on
+  the physical column signature of the landed data, never automated via dynamic
+  dbt lookups at runtime.
+- **Rule 2: Contract Stability**. All Pydantic schema fields must remain
+  `Optional` with `None` defaults to prevent NOT NULL parser errors during
+  DuckDB schema evolution.
+- **Rule 3: Universal Intermediate Models**. Engines should target Master Models
+  by relational type (discovered via registry), ensuring a unified star schema
+  regardless of whether a tenant uses Shopify, WooCommerce, or BigCommerce.
+- **Rule 4: Deterministic Semantics**. The BSL must sit on the Star Schema
+  (Fact/Dim tables) to ensure accurate NLQ and prevent LLM hallucinations on
+  raw, uncleaned data.
