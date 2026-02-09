@@ -2,7 +2,12 @@ WITH users AS (
     SELECT * FROM {{ ref('int_unified_users') }}
 ),
 identity_map AS (
-    SELECT * FROM {{ ref('int_identity_resolution') }}
+    SELECT 
+        resolved_user_id,
+        list(user_pseudo_id) as linked_cookies, -- Aggregating cookies if DuckDB supports list/array
+        min(resolved_at) as first_seen_at
+    FROM {{ ref('int_identity_resolution') }}
+    GROUP BY 1
 ),
 orders AS (
     SELECT
@@ -23,7 +28,8 @@ SELECT
     u.created_at,
     
     -- Identity Links
-    im.resolved_user_id as mapped_user_id, -- Link to unified ID if different
+    im.linked_cookies,
+    im.first_seen_at,
     
     -- Behavioral Metrics (LTV)
     COALESCE(o.total_orders, 0) as lifetime_orders,
@@ -33,7 +39,7 @@ SELECT
 FROM users u
 LEFT JOIN identity_map im 
     ON u.tenant_slug = im.tenant_slug 
-    AND u.source_user_id = im.resolved_user_id -- Assuming source_user_id IS the resolved one for registered users
+    AND u.source_user_id = im.resolved_user_id 
 LEFT JOIN orders o
     ON u.source_user_id = o.resolved_user_id
 

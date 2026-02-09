@@ -1,7 +1,6 @@
 import yaml
-import json
-import subprocess
-import os
+import dlt
+from dlt.common.pipeline import LoadInfo
 
 def load_tenants_config():
     with open("tenants.yaml", "r") as f:
@@ -10,29 +9,32 @@ def load_tenants_config():
 def run_dbt_factory(tenant_configs):
     print("🚀 Auto-Triggering Star Schema Factory via dlt runner...")
     
-    # Inject tenant config as dbt variable
-    vars_json = json.dumps({"tenant_configs": tenant_configs})
+    # Initialize dlt pipeline (destination can be dummy or actual if configured)
+    # Using 'duckdb' destination for local testing/dev as implied by previous context
+    pipeline = dlt.pipeline(
+        pipeline_name='gata_factory', 
+        destination='duckdb', 
+        dataset_name='gata_marts'
+    )
     
-    project_dir = "warehouse/gata_transformation"
-    # Assuming profiles.yml is in project_dir for now, or use default
+    # Configure dbt runner
+    # Pass tenant logic via vars for compile-time access
+    # dlt.dbt.package handles the venv and execution
+    dbt = dlt.dbt.package(
+        pipeline, 
+        "warehouse/gata_transformation",
+        venv=dlt.dbt.get_runner_venv()
+    )
     
-    cmd = [
-        "dbt", "build",
-        "--project-dir", project_dir,
-        "--profiles-dir", project_dir,
-        "--vars", vars_json,
-        "--select", "tag:marketing tag:ecommerce"  
-    ]
+    # Run all models with tag selection
+    # Passing variables as a dict
+    results = dbt.run(
+        models=["tag:marketing", "tag:ecommerce", "tag:identity", "tag:behavioral"],
+        vars={'tenant_configs': tenant_configs}
+    )
     
-    print(f"Running command: dbt build --vars '{{...}}' ...")
-    
-    # In a real scenario, we would execute this:
-    # try:
-    #     subprocess.run(cmd, check=True)
-    #     print("✅ Factory build complete.")
-    # except subprocess.CalledProcessError as e:
-    #     print(f"❌ Factory build failed: {e}")
-    #     raise
+    for r in results:
+        print(f"✅ {r}")
 
 def main():
     print("Loading Tenant Configuration...")
