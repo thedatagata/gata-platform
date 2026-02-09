@@ -156,14 +156,50 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
         except Exception as e:
             print(f"Error writing metadata to warehouse: {e}")
 
-    # 3. Refresh Warehouse Registry
-    print("  - Refreshing Warehouse Registry via dbt...")
-    dbt_cwd = os.path.join(project_root, "warehouse", "gata_transformation")
+    # 3. Refresh Warehouse Registry & Run Transformations (Once after all data gen)
+    print("  - Running dbt Transformations via dlt runner...")
     try:
-        subprocess.run(["dbt", "run", "--select", "platform"], check=True, cwd=dbt_cwd)
-        print("    -> dbt registry refresh successful.")
+        run_dbt_transformations(target, manifest)
+        print("    -> dbt transformations successful.")
     except Exception as e:
-        print(f"    -> dbt registry refresh failed: {e}")
+        print(f"    -> dbt transformations failed: {e}")
+
+def run_dbt_transformations(target: str, manifest: Any):
+    # Configure pipeline for dbt runner
+    # Note: destination might need to be passed or configured via env vars as in run_pipeline
+    
+    # Check if we are local or md
+    if target == "local":
+        project_root = os.path.abspath(os.path.join(current_dir, "../../"))
+        db_path = os.path.join(project_root, "warehouse", "sandbox.duckdb")
+        destination = dlt.destinations.duckdb(db_path)
+    else:
+        destination = "motherduck" # Rely on env vars or dlt config
+
+    pipeline = dlt.pipeline(
+        pipeline_name='gata_factory', 
+        destination=destination,
+        dataset_name='gata_marts'
+    )
+    
+    # dbt runner
+    # Point to the dbt project directory relative to this script
+    dbt_project_dir = os.path.abspath(os.path.join(current_dir, "../../warehouse/gata_transformation"))
+    
+    dbt = dlt.dbt.package(
+        pipeline, 
+        dbt_project_dir, 
+        target_name=target if target != 'local' else 'dev', # dbt targets usually dev/prod
+        venv=dlt.dbt.get_runner_venv()
+    )
+    
+    # Inject the full manifest into dbt as a variable
+    # This runs ALL models, including the platform registry refresh and the Star Schema factory
+    # We use run_all() to trigger the full project or select specific tags
+    print(f"    -> Triggering dbt build with injected tenant config...")
+    dbt.run_all(
+        vars={'tenant_configs': manifest.dict()['tenants']}
+    )
 
 if __name__ == "__main__":
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))

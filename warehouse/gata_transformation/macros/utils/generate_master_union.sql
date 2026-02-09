@@ -1,72 +1,44 @@
-{% macro generate_master_union(master_type, apply_logic=True) %}
+{% macro generate_master_union(master_type) %}
     {# 
-       Mapping concept names to physical master tables.
+       Dynamically find all hubs for this concept using the registry check.
+       This replaces the hardcoded dictionary with a dynamic query.
     #}
-    {%- set mappings = {
-        'campaigns': [
-            'platform_mm__facebook_ads_api_v1_campaigns',
-            'platform_mm__google_ads_api_v1_campaigns',
-            'platform_mm__bing_ads_api_v1_campaigns',
-            'platform_mm__linkedin_ads_api_v1_campaigns',
-            'platform_mm__amazon_ads_api_v1_sponsored_products_campaigns'
-        ],
-        'products': [
-             'platform_mm__shopify_api_v1_products',
-             'platform_mm__bigcommerce_api_v1_products',
-             'platform_mm__woocommerce_api_v1_products'
-        ],
-        'orders': [
-             'platform_mm__shopify_api_v1_orders',
-             'platform_mm__bigcommerce_api_v1_orders',
-             'platform_mm__woocommerce_api_v1_orders'
-        ],
-        'ad_performance': [
-             'platform_mm__facebook_ads_api_v1_facebook_insights',
-             'platform_mm__google_ads_api_v1_ad_performance',
-             'platform_mm__bing_ads_api_v1_account_performance_report', 
-             'platform_mm__linkedin_ads_api_v1_ad_analytics_by_campaign'
-        ],
-        'events': [
-             'platform_mm__google_analytics_api_v1_events',
-             'platform_mm__amplitude_api_v1_events',
-             'platform_mm__mixpanel_api_v1_events'
-        ],
-        'users': [
-             'platform_mm__amplitude_api_v1_users',
-             'platform_mm__mixpanel_api_v1_people',
-             'platform_mm__google_ads_api_v1_customers',
-             'platform_mm__shopify_api_v1_customers'
-        ]
-    } -%}
+    {%- set models_query -%}
+        SELECT source_platform, source_table_name, master_model_id
+        FROM {{ ref('platform_ops__master_model_registry') }}
+        WHERE master_model_id LIKE '%{{ master_type }}%'
+    {%- endset -%}
 
-    {%- set tables = mappings.get(master_type, []) -%}
+    {%- set results = run_query(models_query) if execute else [] -%}
 
-    {%- if not tables -%}
-        SELECT 'No tables found for type: {{ master_type }}' as error
-    {%- else -%}
-        {%- for table in tables -%}
-             {# Parse source_name from physical table string (e.g. 'platform_mm__google_ads_api...') #}
-             {%- set parts = table.split('__') -%}
-             {%- set source_part = parts[1] if parts|length > 1 else 'unknown' -%}
-             {%- set source_name = source_part.split('_api')[0] -%}
-             
-             SELECT 
-                 *, 
-                 '{{ table }}' as _table_source
-                 
-                 {%- if apply_logic -%}
-                     {# Injects calculated columns into the SELECT list #}
-                     {{ apply_tenant_logic(none, source_name, master_type, 'calculation') }}
-                 {%- endif -%}
-                 
-             FROM {{ ref(table) }}
-             WHERE 1=1
-             {%- if apply_logic -%}
-                 {# Injects filters into the WHERE clause #}
-                 {{ apply_tenant_logic(none, source_name, master_type, 'filter') }}
-             {%- endif -%}
-             
-             {%- if not loop.last %} UNION ALL {% endif -%}
+    {%- if results | length > 0 -%}
+        {%- for row in results -%}
+            {%- set platform = row[0] -%}
+            {# Reconstruct table name or use registry info. 
+               The registry has (platform, source_table_name, master_model_id).
+               The physical table name usually follows `platform_mm__<platform>_api_v1_<source_table_name>`.
+               Let's construct it, or better, the registry should probably store the full physical table name.
+               Assuming standard naming convention:
+            #}
+            {%- set table_name = 'platform_mm__' ~ platform ~ '_api_v1_' ~ row[1] -%}
+            
+            SELECT 
+                *,
+                '{{ platform }}' as source_platform
+                
+                {# Inject custom metrics from tenants.yaml while the platform name is known #}
+                {{ apply_tenant_logic(none, platform, master_type, 'calculation') }}
+                
+            FROM {{ ref(table_name) }}
+            WHERE 1=1
+            
+            {# Inject filters while platform is known #}
+            {{ apply_tenant_logic(none, platform, master_type, 'filter') }}
+            
+            {%- if not loop.last %} UNION ALL {% endif -%}
         {%- endfor -%}
+    {%- else -%}
+        {# Fallback for safety or compilation phase #}
+        SELECT 'No hubs found for {{ master_type }}' as error
     {%- endif -%}
 {% endmacro %}
