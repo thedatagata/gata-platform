@@ -45,27 +45,21 @@
         SELECT 'No tables found for type: {{ master_type }}' as error
     {%- else -%}
         {%- for table in tables -%}
-             {# Parse source_name from physical table string (e.g. 'platform_mm__google_ads_api...') #}
-             {%- set parts = table.split('__') -%}
-             {%- set source_part = parts[1] if parts|length > 1 else 'unknown' -%}
-             {%- set source_name = source_part.split('_api')[0] -%}
-             
+             {# Parse source platform from table name, e.g., 'platform_mm__google_ads_api...' -> 'google_ads' #}
+             {%- set platform = table.split('__')[1].split('_api')[0] -%}
              SELECT 
-                 *, 
-                 '{{ table }}' as _table_source
-                 
-                 {%- if apply_logic -%}
-                     {# Injects calculated columns into the SELECT list #}
-                     {{ apply_tenant_logic(none, source_name, master_type, 'calculation') }}
-                 {%- endif -%}
-                 
+                *,
+                '{{ platform }}' as source_platform
+                {%- if apply_logic %}
+                {# 1. Inject calculations into the SELECT list #}
+                {{ apply_tenant_logic(none, platform, master_type, 'calculation') }}
+                {%- endif %}
              FROM {{ ref(table) }}
              WHERE 1=1
-             {%- if apply_logic -%}
-                 {# Injects filters into the WHERE clause #}
-                 {{ apply_tenant_logic(none, source_name, master_type, 'filter') }}
-             {%- endif -%}
-             
+             {%- if apply_logic %}
+             {# 2. Inject filters into the WHERE clause #}
+             {{ apply_tenant_logic(none, platform, master_type, 'filter') }}
+             {%- endif %}
              {%- if not loop.last %} UNION ALL {% endif -%}
         {%- endfor -%}
     {%- endif -%}
