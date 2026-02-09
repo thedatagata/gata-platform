@@ -4,14 +4,14 @@ WITH users AS (
 identity_map AS (
     SELECT 
         resolved_user_id,
-        list(user_pseudo_id) as linked_cookies, -- Aggregating cookies if DuckDB supports list/array
+        list(user_pseudo_id) as linked_cookies, 
         min(resolved_at) as first_seen_at
     FROM {{ ref('int_identity_resolution') }}
     GROUP BY 1
 ),
 orders AS (
     SELECT
-        resolved_user_id,
+        resolved_user_id, -- Maps to u.source_user_id
         count(*) as total_orders,
         sum(total_price) as total_spend
     FROM {{ ref('fct_unified_orders') }}
