@@ -1,6 +1,5 @@
 import yaml
 import dlt
-from dlt.common.pipeline import LoadInfo
 
 def load_tenants_config():
     with open("tenants.yaml", "r") as f:
@@ -9,8 +8,7 @@ def load_tenants_config():
 def run_dbt_factory(tenant_configs):
     print("🚀 Auto-Triggering Star Schema Factory via dlt runner...")
     
-    # Initialize dlt pipeline (destination can be dummy or actual if configured)
-    # Using 'duckdb' destination for local testing/dev as implied by previous context
+    # Initialize dlt pipeline
     pipeline = dlt.pipeline(
         pipeline_name='gata_factory', 
         destination='duckdb', 
@@ -18,7 +16,6 @@ def run_dbt_factory(tenant_configs):
     )
     
     # Configure dbt runner
-    # Pass tenant logic via vars for compile-time access
     # dlt.dbt.package handles the venv and execution
     dbt = dlt.dbt.package(
         pipeline, 
@@ -26,15 +23,16 @@ def run_dbt_factory(tenant_configs):
         venv=dlt.dbt.get_runner_venv()
     )
     
-    # Run all models with tag selection
-    # Passing variables as a dict
-    results = dbt.run(
-        models=["tag:marketing", "tag:ecommerce", "tag:identity", "tag:behavioral"],
+    # Run all models using dbt.run_all (or dbt.main.run equivalent inside package)
+    # The return object of dlt.dbt.package acts like a runner.
+    # The previous instruction used `dbt.run_all`. I will follow that.
+    results = dbt.run_all(
         vars={'tenant_configs': tenant_configs}
     )
     
+    print("✅ Factory build complete.")
     for r in results:
-        print(f"✅ {r}")
+        print(r)
 
 def main():
     print("Loading Tenant Configuration...")
