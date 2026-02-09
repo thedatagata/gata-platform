@@ -5,7 +5,7 @@ import os
 import duckdb
 import json
 from typing import Dict, Any
-import subprocess
+
 
 # 1. Add the current directory to path so we can import from local modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
