@@ -45,9 +45,9 @@ The macro in `macros/onboarding/generate_staging_pusher.sql` creates staging vie
 
 | Tenant | Ad Sources | Ecommerce | Analytics | Status |
 |--------|-----------|-----------|-----------|--------|
-| tyrell_corp | facebook_ads, instagram_ads, google_ads | shopify | google_analytics | Onboarding |
-| wayne_enterprises | bing_ads, google_ads | bigcommerce | google_analytics | Onboarding |
-| stark_industries | facebook_ads, instagram_ads | woocommerce | mixpanel | Onboarding |
+| tyrell_corp | facebook_ads, instagram_ads, google_ads | shopify | google_analytics | Active |
+| wayne_enterprises | bing_ads, google_ads | bigcommerce | google_analytics | Active |
+| stark_industries | facebook_ads, instagram_ads | woocommerce | mixpanel | Active |
 
 ## Important File Locations
 
@@ -58,9 +58,10 @@ The macro in `macros/onboarding/generate_staging_pusher.sql` creates staging vie
 | Connector catalog | `supported_connectors.yaml` (project root) |
 | Engine macros | `warehouse/gata_transformation/macros/engines/{analytics,ecommerce,paid_ads}/` |
 | Factory macros | `warehouse/gata_transformation/macros/factories/` |
+| Intermediate unpacker macro | `warehouse/gata_transformation/macros/factories/generate_intermediate_unpacker.sql` |
 | Push macro | `warehouse/gata_transformation/macros/onboarding/sync_to_master_hub.sql` |
 | Staging pusher macro | `warehouse/gata_transformation/macros/onboarding/generate_staging_pusher.sql` |
-| Intermediate models | `warehouse/gata_transformation/models/intermediate/{tenant}/{platform}/` |
+| Intermediate models | `warehouse/gata_transformation/models/intermediate/{tenant}/` |
 | Analytics models | `warehouse/gata_transformation/models/analytics/{tenant}/` |
 | Master models | `warehouse/gata_transformation/models/platform/master_models/` |
 | Platform governance | `warehouse/gata_transformation/models/platform/{hubs,satellites,ops}/` |
@@ -81,19 +82,31 @@ Example: `uv run --env-file ../../.env dbt run --target dev`
 
 ## Current Database State (Feb 2026)
 
-**Pipeline is fully operational on both targets.** Last successful run: 145 PASS, 0 ERROR, 0 SKIP.
+**Full pipeline operational on both targets.** Last successful run: 125 PASS, 0 ERROR, 0 SKIP.
+
+### Model Counts
+- **Total models:** 124 (121 materialized + 3 hooks)
+- **Intermediate:** 20 models (8 tyrell_corp, 6 wayne_enterprises, 6 stark_industries)
+- **Analytics:** 12 models (4 per tenant: fct_ad_performance, fct_orders, fct_sessions, dim_campaigns)
+- **Boring Semantic Layer:** 1 model cataloging all star schema tables with column metadata
 
 ### MotherDuck (dev target)
 - Raw data in tenant-specific schemas: `tyrell_corp.*`, `wayne_enterprises.*`, `stark_industries.*`
 - Master model tables populated via staging MERGE (data flowing end-to-end)
-- All intermediate views and analytics tables materialized with data
+- All intermediate tables and analytics tables materialized with data
 - `_sources.yml` files include `database: "my_db"` for MotherDuck resolution
 
 ### Sandbox (local target)
 - Raw data in tenant-specific schemas within `warehouse/sandbox.duckdb`
-- Full parity with dev — same 145 models pass
+- Full parity with dev — same 125 models pass
 - `_sources.yml` files omit `database` key (local DuckDB resolves without it)
 - Data landed via `dlt.destinations.duckdb(credentials=sandbox_path)` in orchestrator
+
+### Execution Order Note
+On a full `dbt run`, master model tables are recreated empty (they are `WHERE 1=0` seeds), then staging MERGE post-hooks repopulate them. Intermediate models may execute before staging post-hooks fire, resulting in empty intermediate/analytics tables. **Fix:** Run a second pass for the reporting layer:
+```bash
+uv run --env-file ../../.env dbt run --target <target> --select "models/intermediate models/analytics models/platform/ops/platform_ops__boring_semantic_layer.sql"
+```
 
 ## Onboarding Workflow (sandbox)
 
@@ -110,6 +123,27 @@ uv run --env-file ../../.env dbt run --target sandbox
 ```
 
 For dev (MotherDuck), replace `sandbox` with `dev` in all commands.
+
+## Reporting Layer (Intermediate + Analytics)
+
+### Intermediate Unpacker Macro (`generate_intermediate_unpacker`)
+Reusable macro that generates intermediate models from master models. Parameters:
+- `tenant_slug`, `source_platform`, `master_model_id`, `columns` (list of `{json_key, alias, cast_to}` dicts)
+- Optional: `json_op: '->'` to keep as JSON, `expression` for raw SQL overrides (e.g., computed columns)
+- Always includes passthrough columns: `tenant_slug`, `source_platform`, `tenant_skey`, `loaded_at`, `raw_data_payload`
+
+Models with computed columns (Google Ads `cost_micros / 1000000.0`, Mixpanel `prop_time * 1000`, Shopify/WooCommerce JSON line_items) are written as raw SQL instead of using the macro.
+
+### Star Schema Tables (per tenant)
+| Model | Description |
+|-------|-------------|
+| `fct_{slug}__ad_performance` | UNION ALL of ad engines (spend, impressions, clicks, conversions by ad_id/date) |
+| `fct_{slug}__orders` | Ecommerce orders (order_id, total_price, currency, customer info) |
+| `fct_{slug}__sessions` | Sessionized analytics events (30-min window, attribution, conversion flags) |
+| `dim_{slug}__campaigns` | Campaign dimension (campaign_id, name, status across ad platforms) |
+
+### Boring Semantic Layer (`platform_ops__boring_semantic_layer`)
+Auto-catalogs all `fct_*` and `dim_*` tables using `INFORMATION_SCHEMA`. Outputs one row per star schema table with: `tenant_slug`, `table_type` (fact/dimension), `subject`, `table_name`, `semantic_manifest` (JSON array of column metadata).
 
 ## Platform Governance Models
 
@@ -131,7 +165,7 @@ These track tenant config changes at table-level granularity (tenant + source + 
 
 ## Conventions
 
-- Intermediate models: `int_{tenant_slug}__{platform}_{object}.sql`, materialized as views
+- Intermediate models: `int_{tenant_slug}__{platform}_{object}.sql`, materialized as tables
 - Analytics models: `fct_{tenant_slug}__{metric}.sql` or `dim_{tenant_slug}__{dimension}.sql`, materialized as tables
 - Staging models: `stg_{tenant_slug}__{platform}_{object}.sql`, materialized as views with `sync_to_master_hub()` post-hook
 - Master models: `platform_mm__{connector_api_version}_{object}.sql`
