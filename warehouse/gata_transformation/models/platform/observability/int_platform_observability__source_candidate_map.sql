@@ -1,41 +1,50 @@
 {{ config(materialized='table') }}
 
-{%- set all_clients = get_all_clients() -%}
+{%- set tenants = [
+    {'slug': 'tyrell_corp', 'status': 'active'},
+    {'slug': 'wayne_enterprises', 'status': 'active'},
+    {'slug': 'stark_industries', 'status': 'active'}
+] -%}
 
 WITH physical_inventory AS (
     SELECT * FROM {{ ref('int_platform_observability__md_table_stats') }}
 ),
 
--- Discovery: Targeted lookup based on manifest slugs
 discovered_assets AS (
-    {% for client in all_clients -%}
-    SELECT 
-        '{{ client.slug }}' as client_slug,
-        '{{ client.status }}' as tenant_status,
-        *
-    FROM physical_inventory
-    WHERE source_schema = '{{ client.slug }}' 
-       OR source_table LIKE '{{ client.slug }}_%'
-    {{ "UNION ALL " if not loop.last }}
-    {%- endfor %}
+    {% for client in tenants -%}
+    SELECT
+        '{{ client.slug }}' AS client_slug,
+        '{{ client.status }}' AS tenant_status,
+        pi.project_id,
+        pi.source_schema,
+        pi.source_table,
+        pi.created_at
+    FROM physical_inventory pi
+    WHERE pi.source_schema = '{{ client.slug }}'
+       OR pi.source_table LIKE '{{ client.slug }}_%'
+    {% if not loop.last %}UNION ALL{% endif %}
+    {% endfor %}
 ),
 
 dbt_definitions AS (
-    SELECT 
-        dbt_schema as configured_schema,
-        model_name as table_name,
-        node_id as model_node_id,
-        'true' as is_integrated
+    SELECT
+        dbt_schema AS configured_schema,
+        model_name AS table_name,
+        node_id AS model_node_id,
+        'true' AS is_integrated
     FROM {{ ref('int_platform_observability__model_definitions') }}
     WHERE node_id LIKE 'source.%'
 ),
 
 dbt_health AS (
-    SELECT 
+    SELECT
         source_name,
         source_table,
         freshness_status,
-        RANK() OVER (PARTITION BY source_name, source_table ORDER BY generated_at DESC) as latest_check
+        RANK() OVER (
+            PARTITION BY source_name, source_table
+            ORDER BY generated_at DESC
+        ) AS latest_check
     FROM {{ ref('int_platform_observability__source_freshness_results') }}
 )
 
@@ -45,32 +54,17 @@ SELECT
     a.source_schema,
     a.source_table,
     a.created_at,
-    COALESCE(d.is_integrated, 'false') as integrated_flag,
-    h.freshness_status as dbt_freshness_status,
-    
-    -- Evaluation Logic
-    CASE 
-        -- Scenario A: Already Integrated but failing health checks
-        WHEN d.is_integrated = 'true' 
+    COALESCE(d.is_integrated, 'false') AS integrated_flag,
+    h.freshness_status AS dbt_freshness_status,
+    CASE
+        WHEN d.is_integrated = 'true'
          AND h.freshness_status IN ('warn', 'error')
          THEN 'Integrated - Stale/Failing'
-        
-        -- Scenario B: High Probability New Source (Recent Activity/Creation)
-        WHEN COALESCE(d.is_integrated, 'false') = 'false' 
-         AND to_timestamp(a.created_at) > (current_timestamp - INTERVAL 72 HOUR)
+        WHEN COALESCE(d.is_integrated, 'false') = 'false'
+         AND a.created_at IS NOT NULL
          THEN 'Strong Candidate - Active'
-
-        -- Scenario C: Potential New Client "Shell" (Recent Creation)
-        WHEN COALESCE(d.is_integrated, 'false') = 'false' 
-         AND to_timestamp(a.created_at) > (current_timestamp - INTERVAL 48 HOUR)
-         THEN 'Strong Candidate - New Shell'
-         
-        -- Scenario D: Legacy/Zombie Data
-        WHEN to_timestamp(a.created_at) < (current_timestamp - INTERVAL 30 DAY)
-         THEN 'Likely Stale'
-         
         ELSE 'Neutral'
-    END as candidate_priority_score
+    END AS candidate_priority_score
 FROM discovered_assets a
 LEFT JOIN dbt_definitions d
     ON a.source_schema = d.configured_schema

@@ -15,7 +15,7 @@
     {%- endset -%}
     
     {%- if execute -%}
-        {{ log("🚀 Hardcoded Push: " ~ source_relation ~ " -> " ~ target_relation, info=True) }}
+        {{ log("[PUSH] " ~ source_relation ~ " -> " ~ target_relation, info=True) }}
         {%- do run_query(query) -%}
     {%- endif -%}
 {% endmacro %}

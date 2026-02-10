@@ -12,7 +12,7 @@ SELECT
     currency,
     financial_status,
     email               AS customer_email,
-    CAST(NULL AS VARCHAR) AS customer_id,
+    customer_id,
     line_items_json
 FROM {{ ref('int_' ~ tenant_slug ~ '__shopify_orders') }}
 {% endmacro %}
