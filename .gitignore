@@ -25,3 +25,5 @@ data/
 
 sandbox.duckdb
 sandbox.db
+*.duckdb
+
