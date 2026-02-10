@@ -1,0 +1,7 @@
+sources:
+- name: stark_industries_woocommerce
+  schema: stark_industries
+  tables:
+  - name: raw_stark_industries_woocommerce_orders
+  - name: raw_stark_industries_woocommerce_products
+version: 2

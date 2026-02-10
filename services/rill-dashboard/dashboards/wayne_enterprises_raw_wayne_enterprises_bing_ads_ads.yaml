@@ -1,0 +1,17 @@
+dimensions:
+- column: id
+  label: Id
+  name: id
+- column: ad_group_id
+  label: Ad_Group_Id
+  name: ad_group_id
+- column: type
+  label: Type
+  name: type
+- column: title
+  label: Title
+  name: title
+measures: []
+model: raw_wayne_enterprises_bing_ads_ads
+title: Wayne_Enterprises - Wayne Enterprises Bing Ads Ads
+type: metrics_view

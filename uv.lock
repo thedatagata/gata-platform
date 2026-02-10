@@ -804,7 +804,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "dbt-core" },
     { name = "dbt-duckdb" },
-    { name = "dlt" },
+    { name = "dlt", extra = ["motherduck"] },
     { name = "duckdb" },
     { name = "faker" },
     { name = "fastapi" },
@@ -813,6 +813,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "python-dateutil" },
+    { name = "python-dotenv" },
     { name = "uvicorn" },
 ]
 
@@ -820,7 +821,7 @@ dependencies = [
 requires-dist = [
     { name = "dbt-core", specifier = ">=1.11.2" },
     { name = "dbt-duckdb", specifier = ">=1.8.0" },
-    { name = "dlt", specifier = ">=0.4.0" },
+    { name = "dlt", extras = ["motherduck"], specifier = ">=0.4.0" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "faker", specifier = ">=24.0.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
@@ -829,6 +830,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=16.0.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "uvicorn", specifier = ">=0.29.0" },
 ]
 

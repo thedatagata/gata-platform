@@ -1,0 +1,9 @@
+sources:
+- name: stark_industries_instagram_ads
+  schema: stark_industries
+  tables:
+  - name: raw_stark_industries_instagram_ads_campaigns
+  - name: raw_stark_industries_instagram_ads_ad_sets
+  - name: raw_stark_industries_instagram_ads_facebook_insights
+  - name: raw_stark_industries_instagram_ads_ads
+version: 2

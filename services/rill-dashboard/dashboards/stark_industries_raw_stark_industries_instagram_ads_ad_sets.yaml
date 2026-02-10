@@ -1,0 +1,20 @@
+dimensions:
+- column: id
+  label: Id
+  name: id
+- column: campaign_id
+  label: Campaign_Id
+  name: campaign_id
+- column: name
+  label: Name
+  name: name
+- column: status
+  label: Status
+  name: status
+measures:
+- expression: sum(daily_budget)
+  label: Daily_Budget
+  name: daily_budget
+model: raw_stark_industries_instagram_ads_ad_sets
+title: Stark_Industries - Stark Industries Instagram Ads Ad Sets
+type: metrics_view

@@ -1,6 +1,5 @@
 sources:
-- database: my_db
-  name: wayne_enterprises_bing_ads
+- name: wayne_enterprises_bing_ads
   schema: wayne_enterprises
   tables:
   - name: raw_wayne_enterprises_bing_ads_campaigns

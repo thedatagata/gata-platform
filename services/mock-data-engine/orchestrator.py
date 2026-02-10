@@ -27,11 +27,17 @@ class MockOrchestrator:
 
     def run(self) -> Dict[str, Any]:
         """Orchestrates the ETL pipeline for tenant or library establish."""
-        destination = 'duckdb' if self.credentials and 'duckdb' in self.credentials else 'motherduck'
+        is_local = self.credentials and 'duckdb' in self.credentials
+        if is_local:
+            from pathlib import Path
+            sandbox_path = str(Path(__file__).resolve().parent.parent.parent / "warehouse" / "sandbox.duckdb")
+            destination = dlt.destinations.duckdb(credentials=sandbox_path)
+        else:
+            destination = 'motherduck'
         pipeline = dlt.pipeline(
-            pipeline_name=f'mock_load_{self.config.slug}', 
-            destination=destination, 
-            dataset_name=self.config.slug
+            pipeline_name=f'mock_load_{self.config.slug}',
+            destination=destination,
+            dataset_name=self.config.slug,
         )
         
         load_package = []

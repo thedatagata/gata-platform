@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='stark_industries', source_name='instagram_ads', schema_hash='b1883b4d762376ba3b8a4daa3cd56ef8', master_model_id='facebook_ads_api_v1_ad_sets', source_table='raw_stark_industries_instagram_ads_ad_sets') }}

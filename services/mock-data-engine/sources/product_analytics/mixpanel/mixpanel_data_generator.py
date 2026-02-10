@@ -22,15 +22,41 @@ def generate_mixpanel_data(tenant_slug: str, config: Any, days: int = 30) -> Dic
     event_names = ["Screen View", "Sign Up", "Purchase", "Button Click"]
     total_events = int(daily_events * days)
     
+    # Build user profiles with stable attributes
+    user_profiles = {}
+    for uid in distinct_ids:
+        user_profiles[uid] = {
+            "country": fake.country_code(),
+            "device": random.choice(["desktop", "mobile", "tablet"]),
+        }
+
+    from datetime import datetime, timedelta
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+
+    utm_sources = ["google", "facebook", "email", "direct", None]
+    utm_mediums = ["cpc", "organic", "email", "referral", None]
+    utm_campaigns = ["summer_sale", "brand_awareness", "retargeting", None]
+
     events = []
     for _ in range(total_events):
+        uid = random.choice(distinct_ids)
+        profile = user_profiles[uid]
+        # Spread timestamps across the full date range
+        random_dt = start_date + timedelta(seconds=random.randint(0, days * 86400))
+        
         # MANUAL FLATTENING: Move keys from properties dict to top level
         events.append({
             "event": random.choice(event_names),
-            "prop_distinct_id": random.choice(distinct_ids),
-            "prop_time": int(fake.unix_time()),
-            "prop_browser": "Chrome",
-            "prop_city": fake.city()
+            "prop_distinct_id": uid,
+            "prop_time": int(random_dt.timestamp()),
+            "prop_browser": random.choice(["Chrome", "Safari", "Firefox", "Edge"]),
+            "prop_city": fake.city(),
+            "prop_country_code": profile["country"],
+            "prop_device_type": profile["device"],
+            "prop_utm_source": random.choice(utm_sources),
+            "prop_utm_medium": random.choice(utm_mediums),
+            "prop_utm_campaign": random.choice(utm_campaigns),
         })
 
     return {"events": events, "people": people}

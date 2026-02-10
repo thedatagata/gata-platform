@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='stark_industries', source_name='woocommerce', schema_hash='c978dcad5e2cd16033ebd5cf824337dd', master_model_id='woocommerce_api_v1_products', source_table='raw_stark_industries_woocommerce_products') }}

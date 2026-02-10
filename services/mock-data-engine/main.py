@@ -165,40 +165,39 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
         print(f"    -> dbt transformations failed: {e}")
 
 def run_dbt_transformations(target: str, manifest: Any):
-    # Configure pipeline for dbt runner
-    # Note: destination might need to be passed or configured via env vars as in run_pipeline
+    """Orchestrates transformations using the native dlt-dbt runner pattern."""
     
-    # Check if we are local or md
+    # Configure destination based on target
     if target == "local":
-        project_root = os.path.abspath(os.path.join(current_dir, "../../"))
-        db_path = os.path.join(project_root, "warehouse", "sandbox.duckdb")
+        db_path = os.path.abspath(os.path.join(current_dir, "../../warehouse/sandbox.duckdb"))
         destination = dlt.destinations.duckdb(db_path)
+        credentials = None
     else:
-        destination = "motherduck" # Rely on env vars or dlt config
+        # MotherDuck specific configuration
+        token = os.environ.get('MOTHERDUCK_TOKEN', '')
+        connection_string = f"md:my_db?motherduck_token={token}"
+        destination = dlt.destinations.duckdb(connection_string)
 
     pipeline = dlt.pipeline(
         pipeline_name='gata_factory', 
-        destination=destination,
+        destination=destination, 
         dataset_name='gata_marts'
     )
     
-    # dbt runner
-    # Point to the dbt project directory relative to this script
     dbt_project_dir = os.path.abspath(os.path.join(current_dir, "../../warehouse/gata_transformation"))
     
+    # Use venv=None to bypass the AttributeError and Windows Access Violation
     dbt = dlt.dbt.package(
         pipeline, 
         dbt_project_dir, 
-        target_name=target if target != 'local' else 'dev', # dbt targets usually dev/prod
-        venv=dlt.dbt.get_runner_venv()
+        target_name=target if target != 'local' else 'dev',
+        venv=None
     )
     
-    # Inject the full manifest into dbt as a variable
-    # This runs ALL models, including the platform registry refresh and the Star Schema factory
-    # We use run_all() to trigger the full project or select specific tags
-    print(f"    -> Triggering dbt build with injected tenant config...")
-    dbt.run_all(
-        vars={'tenant_configs': manifest.dict()['tenants']}
+    print(f"    -> Triggering dbt build with logic injection...")
+    # Inject the full manifest dictionary for hub hydration
+    dbt.run(
+        additional_vars={'tenant_configs': manifest.dict()}
     )
 
 if __name__ == "__main__":
