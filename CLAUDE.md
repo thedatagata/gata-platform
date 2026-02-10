@@ -33,14 +33,20 @@ raw_data_payload->'$.nested_object'                     -- keep as JSON
 ```
 
 ### Push Circuit (sync_to_master_hub)
-Staging models are views that SELECT from sources. A post-hook calls `sync_to_master_hub(master_model_id)` which does a MERGE INTO the master model table USING the staging view. This means **master model tables must exist before staging models can push to them**.
+Staging models are views that SELECT from sources. A `post_hook` in `generate_staging_pusher` calls `sync_to_master_hub(master_model_id)` which does a MERGE INTO the master model table USING the staging view. The post-hook ensures the view exists before the MERGE fires. Master model tables must exist before staging models can push to them.
+
+### Staging Pusher (generate_staging_pusher)
+The macro in `macros/onboarding/generate_staging_pusher.sql` creates staging views that:
+1. SELECT from tenant source tables
+2. Pack all source columns into a single `raw_data_payload` JSON column via `row_to_json(base)`
+3. Fire `sync_to_master_hub()` as a `post_hook` (runs after view creation)
 
 ## Active Tenants
 
 | Tenant | Ad Sources | Ecommerce | Analytics | Status |
 |--------|-----------|-----------|-----------|--------|
-| tyrell_corp | facebook_ads, instagram_ads, google_ads | shopify | google_analytics | Active |
-| wayne_enterprises | bing_ads, google_ads | bigcommerce | google_analytics | Active |
+| tyrell_corp | facebook_ads, instagram_ads, google_ads | shopify | google_analytics | Onboarding |
+| wayne_enterprises | bing_ads, google_ads | bigcommerce | google_analytics | Onboarding |
 | stark_industries | facebook_ads, instagram_ads | woocommerce | mixpanel | Onboarding |
 
 ## Important File Locations
@@ -53,40 +59,75 @@ Staging models are views that SELECT from sources. A post-hook calls `sync_to_ma
 | Engine macros | `warehouse/gata_transformation/macros/engines/{analytics,ecommerce,paid_ads}/` |
 | Factory macros | `warehouse/gata_transformation/macros/factories/` |
 | Push macro | `warehouse/gata_transformation/macros/onboarding/sync_to_master_hub.sql` |
+| Staging pusher macro | `warehouse/gata_transformation/macros/onboarding/generate_staging_pusher.sql` |
 | Intermediate models | `warehouse/gata_transformation/models/intermediate/{tenant}/{platform}/` |
 | Analytics models | `warehouse/gata_transformation/models/analytics/{tenant}/` |
 | Master models | `warehouse/gata_transformation/models/platform/master_models/` |
+| Platform governance | `warehouse/gata_transformation/models/platform/{hubs,satellites,ops}/` |
 | Mock data generators | `services/mock-data-engine/sources/{domain}/{platform}/` |
-| Platform ops | `warehouse/gata_transformation/models/platform/ops/` |
-| Platform satellites | `warehouse/gata_transformation/models/platform/satellites/` |
+| Onboarding scripts | `scripts/onboard_tenant.py`, `scripts/initialize_connector_library.py` |
+
+## dbt Commands
+
+**Always run dbt using:** `uv run --env-file ../../.env dbt <command> --target <target>`
+**Always run from:** `warehouse/gata_transformation/`
+
+Example: `uv run --env-file ../../.env dbt run --target dev`
 
 ## dbt Targets
 
-- **dev**: MotherDuck (`md:my_db`). Use `--target dev` for all runs. Requires `MOTHERDUCK_TOKEN` env var.
-- **sandbox**: Local DuckDB file. Avoid — has file locking issues.
+- **dev**: MotherDuck (`md:my_db`). Requires `MOTHERDUCK_TOKEN` env var in `.env` file at project root.
+- **sandbox**: Local DuckDB file (`warehouse/sandbox.duckdb`). Uses `threads: 1` to avoid file locking. Fully functional — no MotherDuck dependency needed.
 
-**Always run dbt from:** `warehouse/gata_transformation/`
+## Current Database State (Feb 2026)
 
-## Current Database State (MotherDuck dev target, Feb 2026)
+**Pipeline is fully operational on both targets.** Last successful run: 145 PASS, 0 ERROR, 0 SKIP.
 
-**CRITICAL: The entire pipeline has 0 data flowing through it.**
-- Raw source data EXISTS in tenant-specific schemas (tyrell_corp.*, wayne_enterprises.*, stark_industries.*)
-- Master model tables exist in main schema but contain 0 rows
-- Staging push (sync_to_master_hub MERGE) has never successfully executed
-- All intermediate views and analytics tables are empty as a result
+### MotherDuck (dev target)
+- Raw data in tenant-specific schemas: `tyrell_corp.*`, `wayne_enterprises.*`, `stark_industries.*`
+- Master model tables populated via staging MERGE (data flowing end-to-end)
+- All intermediate views and analytics tables materialized with data
+- `_sources.yml` files include `database: "my_db"` for MotherDuck resolution
 
-**Data is in tenant schemas, not `main`.** The dbt sources point to:
-- `tyrell_corp.raw_tyrell_corp_{platform}_{object}` (e.g., 1,550 rows in facebook_insights)
-- `wayne_enterprises.raw_wayne_enterprises_{platform}_{object}`
-- `stark_industries.raw_stark_industries_{platform}_{object}` (e.g., 60,000 mixpanel events)
+### Sandbox (local target)
+- Raw data in tenant-specific schemas within `warehouse/sandbox.duckdb`
+- Full parity with dev — same 145 models pass
+- `_sources.yml` files omit `database` key (local DuckDB resolves without it)
+- Data landed via `dlt.destinations.duckdb(credentials=sandbox_path)` in orchestrator
 
-## Current Known Issues (as of Feb 2026)
+## Onboarding Workflow (sandbox)
 
-1. **Staging MERGE bootstrap — BLOCKING ALL DATA FLOW:** Staging views use `sync_to_master_hub()` post-hook which does MERGE INTO master_model USING the staging view. The staging views reference themselves before they exist, causing `Table stg_X does not exist`. This must be fixed first — nothing else matters until data reaches master models.
-2. **`platform_sat__tenant_config_history` schema mismatch (1 error):** `Binder Error: Values list "src" does not have a column named "key"` — config unpacking doesn't match actual YAML structure.
-3. **`connector_blueprints` — EXISTS on MotherDuck dev.** Only missing in sandbox. Not an issue for dev target.
-4. **`tojson` quoting bug — FIXED:** Analytics engines were using `tojson` which produces double quotes. Fixed to use single-quote wrapping via `{% for %}` loop.
-5. **Missing sessions models:** `fct_tyrell_corp__sessions` and `fct_stark_industries__sessions` don't exist yet — were blocked by tojson bug (now fixed). Will materialize on next successful dbt run.
+```bash
+# 1. Initialize connector library (registers schema hashes → master model mappings)
+python scripts/initialize_connector_library.py sandbox
+
+# 2. Set tenant status to "onboarding" in tenants.yaml, then for each tenant:
+python scripts/onboard_tenant.py <tenant_slug> --target sandbox --days 30
+
+# 3. Run full dbt pipeline
+cd warehouse/gata_transformation
+uv run --env-file ../../.env dbt run --target sandbox
+```
+
+For dev (MotherDuck), replace `sandbox` with `dev` in all commands.
+
+## Platform Governance Models
+
+These track tenant config changes at table-level granularity (tenant + source + table):
+
+- **`platform_sat__tenant_config_history`**: Unpacks `sources_config` JSON from tenant manifest using `json_keys()` + `from_json()`. Outputs: `tenant_slug, tenant_skey, source_name, table_name, table_logic, logic_hash, updated_at`
+- **`hub_key_registry`**: Generates surrogate keys from config history for change tracking
+- **`platform_sat__tenant_source_configs`**: Latest config per tenant/source/table (thin wrapper on config_history)
+- **`platform_ops__source_table_candidate_registry`**: Joins config history with physical table inventory for onboarding recommendations
+
+## Resolved Issues (Feb 2026)
+
+1. **Staging MERGE bootstrap — FIXED:** Moved `sync_to_master_hub()` from inline `{% do %}` (ran before view creation) to `post_hook` in config (runs after view creation).
+2. **`struct_pack(*)` error — FIXED:** DuckDB can't resolve `*` inside `struct_pack()`. Replaced with `row_to_json(base)`.
+3. **`platform_sat__tenant_config_history` JSON unpacking — FIXED:** `json_transform` with `'["JSON"]'` lost object keys. Replaced with `json_keys()` + `from_json()`.
+4. **Sandbox target not working — FIXED:** Scripts now route to `warehouse/sandbox.duckdb` when target is `sandbox`. Orchestrator uses `dlt.destinations.duckdb(credentials=path)` to land data in the correct file.
+5. **`tojson` quoting bug — FIXED:** Analytics engines were using `tojson` which produces double quotes. Fixed to use single-quote wrapping via `{% for %}` loop.
+6. **Windows cp1252 emoji crashes — FIXED:** Replaced emoji characters in Python scripts with ASCII-safe `[TAG]` prefixes.
 
 ## Conventions
 
@@ -95,3 +136,4 @@ Staging models are views that SELECT from sources. A post-hook calls `sync_to_ma
 - Staging models: `stg_{tenant_slug}__{platform}_{object}.sql`, materialized as views with `sync_to_master_hub()` post-hook
 - Master models: `platform_mm__{connector_api_version}_{object}.sql`
 - All intermediate models must include `tenant_slug`, `source_platform`, `tenant_skey`, `loaded_at` columns plus `raw_data_payload` as the last column
+- Python scripts must use ASCII-safe print statements (no emojis) for Windows compatibility
