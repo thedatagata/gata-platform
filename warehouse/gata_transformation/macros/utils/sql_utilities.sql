@@ -1,6 +1,7 @@
-{%- macro extract_utm(column_name, utm_parameter) -%}
-    LOWER(regexp_extract({{ column_name }}, '{{ utm_parameter }}=([^&]*)'))
-{%- endmacro -%}
+{% macro extract_utm(url_column, param_name) %}
+    {# Extracts a parameter value from a URL string using regex #}
+    regexp_extract({{ url_column }}, '[?&]{{ param_name }}=([^&]+)', 1)
+{% endmacro %}
 
 {%- macro get_date_dimension_spine(ads_ref, ga_ref) -%}
 WITH analytics AS (

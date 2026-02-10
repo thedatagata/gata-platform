@@ -1,6 +1,5 @@
 sources:
-- database: my_db
-  name: tyrell_corp_google_analytics
+- name: tyrell_corp_google_analytics
   schema: tyrell_corp
   tables:
   - name: raw_tyrell_corp_google_analytics_events

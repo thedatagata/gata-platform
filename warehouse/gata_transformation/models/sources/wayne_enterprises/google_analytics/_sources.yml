@@ -1,6 +1,5 @@
 sources:
-- database: my_db
-  name: wayne_enterprises_google_analytics
+- name: wayne_enterprises_google_analytics
   schema: wayne_enterprises
   tables:
   - name: raw_wayne_enterprises_google_analytics_events

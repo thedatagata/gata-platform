@@ -2,18 +2,9 @@ dimensions:
 - column: name
   label: Name
   name: name
-- column: sku
-  label: Sku
-  name: sku
-- column: status
-  label: Status
-  name: status
-- column: _dlt_load_id
-  label: _Dlt_Load_Id
-  name: _dlt_load_id
-- column: _dlt_id
-  label: _Dlt_Id
-  name: _dlt_id
+- column: created_at
+  label: Created_At
+  name: created_at
 measures:
 - expression: sum(id)
   label: Id

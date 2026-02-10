@@ -1,0 +1,29 @@
+dimensions:
+- column: ad_id
+  label: Ad_Id
+  name: ad_id
+- column: campaign_id
+  label: Campaign_Id
+  name: campaign_id
+- column: adset_id
+  label: Adset_Id
+  name: adset_id
+- column: date_start
+  label: Date_Start
+  name: date_start
+measures:
+- expression: sum(spend)
+  label: Spend
+  name: spend
+- expression: sum(impressions)
+  label: Impressions
+  name: impressions
+- expression: sum(clicks)
+  label: Clicks
+  name: clicks
+- expression: sum(conversions)
+  label: Conversions
+  name: conversions
+model: raw_stark_industries_facebook_ads_facebook_insights
+title: Stark_Industries - Stark Industries Facebook Ads Facebook Insights
+type: metrics_view

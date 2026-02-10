@@ -1,5 +1,8 @@
 {% macro generate_staging_pusher(tenant_slug, source_name, schema_hash, master_model_id, source_table) %}
-{{ config(materialized='view') }}
+{{ config(
+    materialized='view',
+    post_hook=["{{ sync_to_master_hub('" ~ master_model_id ~ "') }}"]
+) }}
 
 WITH base AS (
     SELECT * FROM {{ source(tenant_slug ~ '_' ~ source_name, source_table) }}
@@ -11,10 +14,7 @@ SELECT
     '{{ schema_hash }}'::VARCHAR as source_schema_hash,
     CAST(NULL AS JSON) as source_schema,
     -- Standardizing raw data payload by re-packing normalized columns
-    to_json(struct_pack(*)) as raw_data_payload, 
+    row_to_json(base) as raw_data_payload,
     current_timestamp as loaded_at
 FROM base
-
--- REGISTRY-DRIVEN PUSH: HARDCODED TARGET
-{% do sync_to_master_hub(master_model_id) %}
 {% endmacro %}

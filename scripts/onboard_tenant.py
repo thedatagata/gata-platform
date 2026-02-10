@@ -28,7 +28,7 @@ def load_env_file():
 load_env_file()
 
 def get_db_connection(target='dev'):
-    if target == 'local':
+    if target in ('sandbox', 'local'):
         return duckdb.connect(str(PROJECT_ROOT / "warehouse" / "sandbox.duckdb"))
     token = os.environ.get("MOTHERDUCK_TOKEN")
     con = duckdb.connect(f"md:my_db?motherduck_token={token}" if token else "md:my_db")
@@ -54,15 +54,18 @@ def lookup_master_model(schema_hash: str, target: str = 'dev') -> str:
     finally:
         con.close()
 
-def generate_sources_yml(tenant_slug, source_name, tables):
+def generate_sources_yml(tenant_slug, source_name, tables, target='dev'):
     src_dir = DBT_PROJECT_DIR / "models" / "sources" / tenant_slug / source_name
     src_dir.mkdir(parents=True, exist_ok=True)
+    source_entry = {
+        "name": f"{tenant_slug}_{source_name}", "schema": tenant_slug,
+        "tables": [{"name": t} for t in tables]
+    }
+    if target not in ('sandbox', 'local'):
+        source_entry["database"] = "my_db"
     source_cfg = {
         "version": 2,
-        "sources": [{
-            "name": f"{tenant_slug}_{source_name}", "database": "my_db", "schema": tenant_slug,
-            "tables": [{"name": t} for t in tables]
-        }]
+        "sources": [source_entry]
     }
     with open(src_dir / "_sources.yml", "w") as f:
         yaml.dump(source_cfg, f, default_flow_style=False)
@@ -72,12 +75,12 @@ def generate_scaffolding(tenant_slug, target, days=30):
     tenant_config = next((t for t in manifest.tenants if t.slug == tenant_slug), None)
 
     if not tenant_config:
-        print(f"❌ Tenant {tenant_slug} not found.")
+        print(f"[ERR] Tenant {tenant_slug} not found.")
         return
 
     # 1. LAND DATA
-    print(f"📡 Loading mock data for {tenant_slug}...")
-    orchestrator = MockOrchestrator(tenant_config, days=days, credentials='motherduck' if target != 'local' else 'duckdb')
+    print(f"[LOAD] Loading mock data for {tenant_slug}...")
+    orchestrator = MockOrchestrator(tenant_config, days=days, credentials='duckdb' if target in ('sandbox', 'local') else 'motherduck')
     dlt_schema_dict = orchestrator.run() 
 
     # 2. GENERATE DBT MODELS DYNAMICALLY
@@ -115,7 +118,7 @@ def generate_scaffolding(tenant_slug, target, days=30):
         master_model_id = lookup_master_model(schema_hash, target)
         
         if master_model_id == 'unknown':
-            print(f"⚠️ DNA {schema_hash[:8]} unknown for {table_name}. Skipping.")
+            print(f"[WARN] DNA {schema_hash[:8]} unknown for {table_name}. Skipping.")
             continue
 
         # 3. Create Staging Pusher
@@ -128,11 +131,11 @@ def generate_scaffolding(tenant_slug, target, days=30):
         
         with open(stg_dir / stg_filename, "w") as f:
             f.write(stg_content.strip())
-        print(f"✅ Created staging pusher: {stg_filename}")
+        print(f"[OK] Created staging pusher: {stg_filename}")
 
     # 4. Finalize Sources
     for source_name, tables in processed_sources.items():
-        generate_sources_yml(tenant_slug, source_name, tables)
+        generate_sources_yml(tenant_slug, source_name, tables, target)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

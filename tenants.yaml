@@ -1,7 +1,7 @@
 tenants:
   - slug: tyrell_corp
     business_name: "Tyrell Corporation"
-    status: active
+    status: onboarding
     sources:
       facebook_ads:
         enabled: true

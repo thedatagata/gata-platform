@@ -23,6 +23,10 @@ def calculate_dlt_schema_hash(dlt_schema: dict, table_name: str) -> str:
     return hashlib.md5(signature.encode('utf-8')).hexdigest()
 
 def get_db_connection(target='dev'):
+    if target in ('sandbox', 'local'):
+        con = duckdb.connect(str(PROJECT_ROOT / "warehouse" / "sandbox.duckdb"))
+        con.sql("CREATE SCHEMA IF NOT EXISTS main")
+        return con
     token = os.environ.get("MOTHERDUCK_TOKEN")
     con = duckdb.connect(f"md:my_db?motherduck_token={token}" if token else "md:my_db")
     con.sql("CREATE SCHEMA IF NOT EXISTS main")
@@ -34,20 +38,20 @@ def load_connectors_catalog(target='dev'):
     try: 
         existing_blueprints = con.sql("SELECT * FROM main.connector_blueprints").to_df().to_dict('records')
     except: 
-        print("🆕 Starting fresh registry.")
+        print("[NEW] Starting fresh registry.")
 
     with open(PROJECT_ROOT / "supported_connectors.yaml", "r") as f:
         manifest = yaml.safe_load(f)
 
     for connector_def in manifest['connectors']:
         source_name = connector_def['name']
-        print(f"📦 Mapping DNA for: {source_name}...")
+        print(f"[DNA] Mapping DNA for: {source_name}...")
         
         dummy_tenant = TenantConfig(slug="library_sample", business_name="Library", sources=SourceRegistry())
         setattr(dummy_tenant.sources, source_name, SourceConfig(enabled=True))
         
         # INCREASED TO 30 DAYS: Ensures high categorical density for DNA established
-        orch = MockOrchestrator(dummy_tenant, days=30, credentials=target)
+        orch = MockOrchestrator(dummy_tenant, days=30, credentials='duckdb' if target in ('sandbox', 'local') else 'motherduck')
         dlt_schema_dict = orch.run() 
 
         for table_name in dlt_schema_dict.get('tables', {}).keys():
@@ -59,7 +63,7 @@ def load_connectors_catalog(target='dev'):
             master_id = f"{connector_def['master_model_id']}_{obj_id}"
             
             if not any(b['source_schema_hash'] == struct_hash for b in existing_blueprints):
-                print(f"✨ Registering: {struct_hash[:8]} -> platform_mm__{master_id}")
+                print(f"[REG] Registering: {struct_hash[:8]} -> platform_mm__{master_id}")
                 existing_blueprints.append({
                     "source_name": source_name, "source_table_name": obj_id,
                     "source_schema_hash": struct_hash, "master_model_id": master_id,
@@ -71,7 +75,8 @@ def load_connectors_catalog(target='dev'):
         con.sql("CREATE OR REPLACE TABLE main.connector_blueprints AS SELECT * FROM df_blueprints")
     
     con.close()
-    subprocess.run(f"dbt run --select platform_ops__master_model_registry --target {target}", cwd=str(PROJECT_ROOT / "warehouse" / "gata_transformation"), check=True, shell=True)
+    dbt_target = 'sandbox' if target in ('sandbox', 'local') else target
+    subprocess.run(f"uv run --env-file ../../.env dbt run --select platform_ops__master_model_registry --target {dbt_target}", cwd=str(PROJECT_ROOT / "warehouse" / "gata_transformation"), check=True, shell=True)
 
 if __name__ == "__main__":
     load_connectors_catalog(sys.argv[1] if len(sys.argv) > 1 else 'dev')

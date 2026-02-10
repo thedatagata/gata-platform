@@ -1,41 +1,35 @@
 import yaml
-import dlt
+import os
+from dlt.helpers.dbt import create_runner
 
 def load_tenants_config():
     with open("tenants.yaml", "r") as f:
         return yaml.safe_load(f)
 
 def run_dbt_factory(tenant_configs):
-    print("🚀 Auto-Triggering Star Schema Factory via dlt runner...")
+    print("🚀 Auto-Triggering Star Schema Factory via dlt runner (MotherDuck)...")
     
-    # Initialize dlt pipeline
-    pipeline = dlt.pipeline(
-        pipeline_name='gata_factory', 
-        destination='duckdb', 
-        dataset_name='gata_marts'
+    # Use create_runner with YOUR profiles.yml — no dlt credential management needed
+    runner = create_runner(
+        venv=None,          # use current environment (dbt already installed)
+        credentials=None,   # skip dlt credential injection — profiles.yml handles it
+        working_dir=".",
+        package_location="warehouse/gata_transformation",
+        package_profiles_dir=os.path.abspath("warehouse/gata_transformation"),
+        package_profile_name="swamp-duck",
     )
     
-    # Configure dbt runner
-    # dlt.dbt.package handles the venv and execution
-    dbt = dlt.dbt.package(
-        pipeline, 
-        "warehouse/gata_transformation",
-        venv=dlt.dbt.get_runner_venv()
+    # Execute transformations targeting MotherDuck
+    results = runner.run(
+        cmd_params=("--fail-fast", "--target", "dev"),
+        additional_vars={"tenant_configs": tenant_configs},
     )
     
-    # Run all models using dbt.run_all (or dbt.main.run equivalent inside package)
-    # The return object of dlt.dbt.package acts like a runner.
-    # The previous instruction used `dbt.run_all`. I will follow that.
-    results = dbt.run_all(
-        vars={'tenant_configs': tenant_configs}
-    )
-    
-    print("✅ Factory build complete.")
+    print("✅ Factory build complete in MotherDuck.")
     for r in results:
-        print(r)
+        print(f"Model: {r.model_name} | Status: {r.status}")
 
 def main():
-    print("Loading Tenant Configuration...")
     config = load_tenants_config()
     run_dbt_factory(config)
 

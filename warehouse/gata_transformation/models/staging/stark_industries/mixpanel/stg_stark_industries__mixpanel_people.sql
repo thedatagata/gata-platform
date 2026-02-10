@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='stark_industries', source_name='mixpanel', schema_hash='7883ab9810dcc5a4d650c0be4e204fb7', master_model_id='mixpanel_api_v1_people', source_table='raw_stark_industries_mixpanel_people') }}

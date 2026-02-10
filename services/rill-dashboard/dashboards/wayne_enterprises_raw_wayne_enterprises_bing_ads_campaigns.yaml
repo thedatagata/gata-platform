@@ -1,0 +1,14 @@
+dimensions:
+- column: id
+  label: Id
+  name: id
+- column: name
+  label: Name
+  name: name
+- column: status
+  label: Status
+  name: status
+measures: []
+model: raw_wayne_enterprises_bing_ads_campaigns
+title: Wayne_Enterprises - Wayne Enterprises Bing Ads Campaigns
+type: metrics_view

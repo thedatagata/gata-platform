@@ -20,6 +20,19 @@ def generate_woocommerce_data(tenant_slug: str, config: Any, days: int = 30) -> 
     total_orders = int(daily_orders * days)
     for _ in range(total_orders):
         price = round(np.random.lognormal(np.log(100), 0.5), 2)
+        # Select random products for line items
+        n_items = random.randint(1, 4)
+        selected_products = random.choices(products, k=n_items)
+        line_items = [
+            {
+                "product_id": p["id"],
+                "name": p["name"],
+                "quantity": random.randint(1, 3),
+                "price": p["price"]
+            }
+            for p in selected_products
+        ]
+
         orders.append({
             "id": random.randint(5000, 99999),
             "number": str(random.randint(10000, 50000)),
@@ -27,6 +40,8 @@ def generate_woocommerce_data(tenant_slug: str, config: Any, days: int = 30) -> 
             "total_price": float(price),
             "currency": "USD",
             "customer_id": random.randint(1, 1000),
+            "billing_email": fake.ascii_email(),
+            "line_items": line_items,
             "created_at": fake.date_time_this_month()
         })
 

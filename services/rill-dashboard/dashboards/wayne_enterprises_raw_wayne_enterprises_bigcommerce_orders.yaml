@@ -1,0 +1,26 @@
+dimensions:
+- column: status
+  label: Status
+  name: status
+- column: currency
+  label: Currency
+  name: currency
+- column: created_at
+  label: Created_At
+  name: created_at
+measures:
+- expression: sum(id)
+  label: Id
+  name: id
+- expression: sum(status_id)
+  label: Status_Id
+  name: status_id
+- expression: sum(total_price)
+  label: Total_Price
+  name: total_price
+- expression: sum(customer_id)
+  label: Customer_Id
+  name: customer_id
+model: raw_wayne_enterprises_bigcommerce_orders
+title: Wayne_Enterprises - Wayne Enterprises Bigcommerce Orders
+type: metrics_view
