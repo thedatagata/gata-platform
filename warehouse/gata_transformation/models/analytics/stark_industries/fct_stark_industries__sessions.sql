@@ -1,0 +1,2 @@
+{{ config(materialized='table') }}
+{{ build_fct_sessions('stark_industries', 'mixpanel', []) }}
