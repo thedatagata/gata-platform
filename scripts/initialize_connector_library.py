@@ -9,10 +9,23 @@ from pathlib import Path
 from datetime import datetime
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DBT_PROJECT_DIR = PROJECT_ROOT / "warehouse" / "gata_transformation"
+MASTER_MODELS_DIR = DBT_PROJECT_DIR / "models" / "platform" / "master_models"
 sys.path.append(str(PROJECT_ROOT / "services" / "mock-data-engine"))
 
 from orchestrator import MockOrchestrator
 from config import TenantConfig, SourceRegistry, SourceConfig
+
+MASTER_MODEL_TEMPLATE = "{{ generate_master_model() }}\n"
+
+def ensure_master_model_file(master_id: str):
+    """Create the dbt master model .sql file if it doesn't already exist."""
+    MASTER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    model_file = MASTER_MODELS_DIR / f"platform_mm__{master_id}.sql"
+    if not model_file.exists():
+        model_file.write_text(MASTER_MODEL_TEMPLATE)
+        print(f"[NEW] Created master model file: platform_mm__{master_id}.sql")
+    return model_file
 
 def calculate_dlt_schema_hash(dlt_schema: dict, table_name: str) -> str:
     """Computes a structural hash based on physical columns and types."""
@@ -69,6 +82,7 @@ def load_connectors_catalog(target='dev'):
                     "source_schema_hash": struct_hash, "master_model_id": master_id,
                     "version": connector_def['version'], "registered_at": datetime.now()
                 })
+            ensure_master_model_file(master_id)
 
     if existing_blueprints:
         df_blueprints = pl.DataFrame(existing_blueprints)

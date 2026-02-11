@@ -1,7 +1,50 @@
 selectors:
+  # ── Tenant Selectors ──────────────────────────────────────────────
+  - name: tyrell_corp
+    definition:
+      union:
+        - tag: tyrell_corp
+        - method: fqn
+          value: tyrell_corp
+
+  - name: wayne_enterprises
+    definition:
+      union:
+        - tag: wayne_enterprises
+        - method: fqn
+          value: wayne_enterprises
+
   - name: stark_industries
     definition:
       union:
         - tag: stark_industries
         - method: fqn
           value: stark_industries
+
+  # ── Operational Selectors ─────────────────────────────────────────
+  # Reporting refresh: intermediate + analytics only (skip source/staging/master)
+  # Use: dbt run --selector reporting_refresh
+  - name: reporting_refresh
+    definition:
+      union:
+        - method: path
+          value: models/intermediate
+        - method: path
+          value: models/analytics
+
+  # Safe full-refresh: everything EXCEPT master models
+  # Use: dbt run --full-refresh --selector safe_full_refresh
+  - name: safe_full_refresh
+    definition:
+      method: path
+      value: models
+      exclude:
+        - method: tag
+          value: master_model
+
+  # Master models only (for inspection/debugging)
+  # Use: dbt run --selector master_models_only
+  - name: master_models_only
+    definition:
+      method: tag
+      value: master_model

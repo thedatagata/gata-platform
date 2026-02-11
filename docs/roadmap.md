@@ -1,326 +1,500 @@
-# GATA Platform Roadmap
+# Backend API Service — Claude Code Execution Plan
 
-This document tracks implementation phases, current status, and upcoming work. It serves as both a progress log and a coordination guide for agents working on the codebase.
+## Objective
 
----
+Get `services/platform-api/` production-ready with a governed query builder,
+model discovery endpoints, and tenant-scoped observability before shifting to
+Deno Fresh frontend integration.
 
-## Completed Phases
+## Current State Assessment
 
-### Phase 1: Foundation — Connector Library & Data Contracts 
+### What Exists
 
-**Goal:** Establish the structural fingerprinting system and Pydantic data contracts for all supported connectors.
+| Asset                | Location                                               | Status                                                                                                            |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| FastAPI app          | `services/platform-api/main.py`                        | 3 endpoints: GET `/semantic-layer/{tenant}`, GET `/semantic-layer/{tenant}/config`, POST `/semantic-layer/update` |
+| Semantic configs     | `services/platform-api/semantic_configs/{tenant}.yaml` | Complete for all 3 tenants — 6 models each with dimensions, measures, calculated_measures, joins                  |
+| pyproject.toml       | `services/platform-api/pyproject.toml`                 | fastapi, uvicorn, duckdb, pyyaml                                                                                  |
+| Tests                | `services/platform-api/test_main.py`                   | 1 test (update_logic_integrity)                                                                                   |
+| Rill dashboards      | `services/rill-dashboard/`                             | Stale — raw source tables, not star schema. Cannot run on Windows                                                 |
+| BSL mapper           | `services/mock-data-engine/utils/bsl_mapper.py`        | Contains `generate_rill_yaml()` coupled to `generate_boring_manifest()`                                           |
+| Observability models | `warehouse/.../platform/observability/`                | 8 intermediate models — all global except `identity_resolution_stats`                                             |
+| DuckDB connection    | main.py                                                | MotherDuck via token or local sandbox — already working                                                           |
 
-**Delivered:**
-- `supported_connectors.yaml` with 13 connectors across 3 domains (7 paid ads, 3 ecommerce, 3 analytics)
-- `scripts/initialize_connector_library.py` — calculates MD5 schema hashes from physical column definitions
-- Pydantic schemas in `services/mock-data-engine/schemas/` for all connector objects
-- `connector_blueprints` registry mapping schema fingerprints → master model IDs
-- Mock data generators producing realistic synthetic data for all connectors
+### What's Missing
 
-**Key Files:**
-- `supported_connectors.yaml`
-- `scripts/initialize_connector_library.py`
-- `services/mock-data-engine/schemas/*.py`
-- `services/mock-data-engine/orchestrator.py` (Polars-based extraction with Pydantic enforcement)
-
----
-
-### Phase 2: Tenant Onboarding & Source Layer 
-
-**Goal:** Automate the creation of source shims and staging pushers for new tenants.
-
-**Delivered:**
-- `tenants.yaml` as the single source of truth for tenant configs (3 tenants defined: tyrell_corp, wayne_enterprises, stark_industries)
-- `scripts/onboard_tenant.py` — reads tenants.yaml, scaffolds `_sources.yml` and staging models per tenant per platform
-- Source shim generation: `models/sources/{tenant}/{platform}/_sources.yml`
-- Staging pusher generation: `models/staging/{tenant}/{platform}/stg_{tenant}__{platform}_{object}.sql`
-- Macros: `generate_staging_pusher`, `load_clients`, `gen_tenant_key`, `get_tenant_config`
-
-**Current Model Count:**
-- Sources: 9 `_sources.yml` files (tyrell_corp: 5 platforms, wayne_enterprises: 4 platforms)
-- Staging: 28 pusher models
+- Query builder that compiles structured semantic queries → SQL
+- Model discovery endpoints (GET /models, GET /models/{name})
+- Query execution endpoint (POST /query)
+- Tenant-scoped observability in run_results and test_results
+- Observability API endpoints
+- Rill removal + bsl_mapper cleanup
+- Pydantic models for request/response validation
+- CORS config for Deno Fresh frontend
 
 ---
 
-### Phase 3: Master Model Layer & Data Vault 
+## Phase 1: Remove Rill + Clean BSL Mapper
 
-**Goal:** Build the multi-tenant sinks, hub key registry, and satellite tracking.
+### Prompt 1.1 — Delete Rill & Clean bsl_mapper
 
-**Delivered:**
-- 31 master models in `models/platform/master_models/` covering all 13 connectors and their objects
-- Each master model has standard columns: `tenant_slug`, `source_platform`, `tenant_skey`, `source_schema_hash`, `loaded_at`, `raw_data_payload`
-- Hub key registry: `models/platform/hubs/hub_key_registry.sql`
-- Satellite tables for schema history, tenant config history, and tenant source configs
-- Ops models: master model registry, schema hash registry, source table candidate registry
-- Facebook/Instagram ads share `facebook_ads_api_v1` master models with `source_platform` differentiation
+```
+Delete the entire `services/rill-dashboard/` directory.
 
-**Key Files:**
-- `models/platform/master_models/platform_mm__*.sql` (31 models)
-- `models/platform/satellites/platform_sat__*.sql` (3 satellites)
-- `models/platform/ops/platform_ops__*.sql` (3 ops models)
-- `macros/onboarding/sync_to_master_hub.sql`
-- `macros/onboarding/sync_to_schema_history.sql`
+In `services/mock-data-engine/utils/bsl_mapper.py`:
+1. Remove the `generate_rill_yaml()` function entirely
+2. In `generate_boring_manifest()`, remove the line that calls `generate_rill_yaml()`
+3. Remove the `import os` if it's only used by generate_rill_yaml (check first)
+4. Keep everything else in generate_boring_manifest unchanged
 
----
+Verify: Run `python -c "from utils.bsl_mapper import generate_boring_manifest; print('OK')"` from `services/mock-data-engine/` to confirm the import still works.
+```
 
-### Phase 4: Push Circuit Closure & Intermediate Layer 
+**Expected changes:**
 
-**Goal:** Wire staging pushers to master models via post-hooks and build tenant-isolated intermediate views.
-
-**Delivered:**
-- `sync_to_master_hub()` post-hook on all staging models — MERGE into target master model
-- Intermediate models for tyrell_corp (16 models across 5 platforms) and wayne_enterprises (12 models across 4 platforms)
-- Each intermediate model: filters by `tenant_slug` + `source_platform`, extracts typed fields from `raw_data_payload` JSON, applies tenant-specific logic from `tenants.yaml`
-- All intermediate models materialized as `view` (lightweight projections, no data duplication)
-- Naming: `int_{tenant}__{platform}_{object}.sql`
-- `source_platform` filters correctly differentiate Facebook vs Instagram ads in shared master models
-
-**Current Model Count:**
-- Intermediate: 28 models (tyrell_corp: 16, wayne_enterprises: 12)
+- DELETE: `services/rill-dashboard/` (entire directory)
+- MODIFY: `services/mock-data-engine/utils/bsl_mapper.py` — remove
+  `generate_rill_yaml()` + its call
 
 ---
 
-### Phase 5: Engines, Factories & Analytics Star Schema 
+## Phase 2: Query Builder + API Endpoints
 
-**Goal:** Build the shell-and-engine architecture that normalizes diverse sources into canonical star schemas.
+### Prompt 2.1 — Pydantic Models
 
-**Delivered:**
+```
+Create `services/platform-api/models.py` with Pydantic models for the semantic query API.
 
-**Engines (13 total):**
-- Paid Ads (7): `engine_facebook_ads`, `engine_instagram_ads`, `engine_google_ads`, `engine_bing_ads`, `engine_linkedin_ads`, `engine_amazon_ads`, `engine_tiktok_ads`
-  - Canonical: `tenant_slug, source_platform, report_date, campaign_id, ad_group_id, ad_id, spend, impressions, clicks, conversions`
-- Ecommerce (3): `engine_shopify`, `engine_bigcommerce`, `engine_woocommerce`
-  - Canonical: `tenant_slug, source_platform, order_id, order_date, total_price, currency, financial_status, customer_email, customer_id, line_items_json`
-- Analytics (3): `engine_google_analytics`, `engine_amplitude`, `engine_mixpanel`
-  - Canonical: sessionized output with 30-min windows, first-touch attribution, conversion flags, revenue tracking
+Use these exact schemas:
 
-**Factories (4 total):**
-- `build_fct_ad_performance(tenant_slug, ad_sources)` — UNION ALL of paid ad engines via `engine_map`
-- `build_fct_orders(tenant_slug, ecommerce_sources)` — UNION ALL of ecommerce engines
-- `build_fct_sessions(tenant_slug, analytics_source, conversion_events)` — single analytics engine call
-- `build_dim_campaigns(tenant_slug, ad_sources)` — UNION ALL of campaign intermediate models
+1. `SemanticQueryRequest` — the POST body for /query:
+   - model: str (required — e.g. "fct_tyrell_corp__ad_performance")
+   - dimensions: list[str] (default [])
+   - measures: list[str] (default [])
+   - calculated_measures: list[str] (default [])
+   - filters: list[QueryFilter] (default [])
+   - joins: list[str] (default [] — model names to join)
+   - order_by: list[OrderByClause] (default [])
+   - limit: int | None (default 1000, max 10000)
 
-**Analytics Shell Models (8 total):**
-- Tyrell Corp (4): `fct_tyrell_corp__ad_performance`, `fct_tyrell_corp__orders`, `fct_tyrell_corp__sessions`, `dim_tyrell_corp__campaigns`
-- Wayne Enterprises (4): `fct_wayne_enterprises__ad_performance`, `fct_wayne_enterprises__orders`, `fct_wayne_enterprises__sessions`, `dim_wayne_enterprises__campaigns`
-- All materialized as `table`
+2. `QueryFilter`:
+   - field: str
+   - op: str — must be one of: =, !=, >, <, >=, <=, IN, LIKE, BETWEEN, IS NULL, IS NOT NULL
+   - value: str | int | float | list | None (None for IS NULL/IS NOT NULL)
 
-**Key Files:**
-- `macros/engines/paid_ads/engine_*.sql` (7 files)
-- `macros/engines/ecommerce/engine_*.sql` (3 files)
-- `macros/engines/analytics/engine_*.sql` (3 files)
-- `macros/factories/build_*.sql` (4 files)
-- `models/analytics/{tenant}/*.sql` (8 files)
+3. `OrderByClause`:
+   - field: str
+   - dir: Literal["asc", "desc"] (default "asc")
+
+4. `SemanticQueryResponse`:
+   - sql: str
+   - data: list[dict]
+   - columns: list[ColumnInfo]
+   - row_count: int
+
+5. `ColumnInfo`:
+   - name: str
+   - type: str
+
+6. `ModelSummary` — for GET /models listing:
+   - name: str
+   - label: str
+   - description: str
+   - dimension_count: int
+   - measure_count: int
+   - has_joins: bool
+
+7. `ModelDetail` — for GET /models/{name}:
+   - name: str
+   - label: str
+   - description: str
+   - dimensions: list[dict]
+   - measures: list[dict]
+   - calculated_measures: list[dict]
+   - joins: list[dict]
+
+Add `from pydantic import BaseModel, field_validator` at the top. Add a validator on QueryFilter.op that rejects operators not in the allowlist.
+```
+
+### Prompt 2.2 — Query Builder
+
+```
+Create `services/platform-api/query_builder.py`. This module compiles a SemanticQueryRequest into parameterized SQL using a tenant's BSL YAML config.
+
+Read the BSL config format from `services/platform-api/semantic_configs/tyrell_corp.yaml` to understand the structure. Each model has: dimensions (list of {name, type}), measures (list of {name, type, agg}), calculated_measures (list of {name, label, sql, format}), joins (list of {to, type, on}).
+
+Implement class `QueryBuilder`:
+
+__init__(self, config: dict):
+  - Takes the parsed YAML config dict (the full tenant config with 'models' list)
+  - Builds a lookup: model_name → model_config
+
+build_query(self, tenant_slug: str, request: SemanticQueryRequest) -> tuple[str, list]:
+  Returns (sql_string, parameters_list).
+
+  Logic:
+  1. Find the model in config — raise ValueError if not found
+  2. Validate all requested dimensions exist in model config — raise ValueError for unknowns
+  3. Validate all requested measures exist in model config — raise ValueError for unknowns
+  4. Validate all requested calculated_measures exist — raise ValueError for unknowns
+  5. Validate all requested joins exist in model's joins list (match by 'to' field) — raise ValueError for unknowns
+
+  6. Build SELECT clause:
+     - Dimensions: just the column name (e.g., "source_platform")
+     - Measures: wrap in agg function from config (e.g., SUM(spend), COUNT(DISTINCT order_id) for agg="count_distinct", AVG(session_duration_seconds) for agg="avg")
+     - Calculated measures: use the raw SQL expression from config (e.g., the ctr CASE expression)
+
+  7. Build FROM clause: just the model name as a table reference (e.g., "fct_tyrell_corp__ad_performance")
+
+  8. Build JOIN clauses: for each requested join, look up the join config on the model:
+     - Get join type ("left" → "LEFT JOIN")
+     - Get the target table name from "to"
+     - Build ON clause from the "on" dict: {campaign_id: campaign_id, source_platform: source_platform} → "base.campaign_id = dim_tyrell_corp__campaigns.campaign_id AND base.source_platform = dim_tyrell_corp__campaigns.source_platform"
+     - Use "base" as alias for the FROM table
+
+  9. Build WHERE clause:
+     - ALWAYS include: tenant_slug = ? (parameterized) — this is the tenant isolation guard
+     - For each filter: build "field op ?" with the value as a parameter
+     - Special cases: IS NULL / IS NOT NULL have no value parameter; IN uses "field IN (?, ?, ...)" with each list item as a parameter; BETWEEN uses "field BETWEEN ? AND ?" expecting value to be a 2-element list
+
+  10. Build GROUP BY: positional references (1, 2, 3...) for each dimension if any measures are present
+
+  11. Build ORDER BY from request
+
+  12. Build LIMIT from request
+
+  Return the full SQL string and the flat parameters list.
+
+  IMPORTANT: Use "base" alias on the FROM table when joins are present. When no joins, no alias needed.
+  IMPORTANT: Prefix dimension/measure column references with "base." when joins are present to avoid ambiguity.
+
+Also implement:
+  get_model_summary(self, model_name: str) -> dict
+  list_models(self) -> list[dict]
+
+These return the model metadata from config for the API discovery endpoints.
+```
+
+### Prompt 2.3 — Wire Up API Endpoints
+
+````
+Modify `services/platform-api/main.py` to add the query builder endpoints and CORS support.
+
+Changes:
+
+1. Add imports at top:
+   - `from fastapi.middleware.cors import CORSMiddleware`
+   - `from models import SemanticQueryRequest, SemanticQueryResponse, ColumnInfo, ModelSummary, ModelDetail`
+   - `from query_builder import QueryBuilder`
+   - `from typing import Optional`
+
+2. Add CORS middleware after `app = FastAPI()`:
+   ```python
+   app.add_middleware(
+       CORSMiddleware,
+       allow_origins=["http://localhost:8000", "http://localhost:3000", "https://*.deno.dev"],
+       allow_credentials=True,
+       allow_methods=["*"],
+       allow_headers=["*"],
+   )
+````
+
+3. Add helper function `_get_db_connection()` that centralizes the DuckDB
+   connection logic already in get_semantic_layer (MotherDuck token check,
+   GATA_ENV local fallback). Return a duckdb.Connection.
+
+4. Add helper function `_get_query_builder(tenant_slug: str) -> QueryBuilder`
+   that loads the semantic config YAML and returns a QueryBuilder instance.
+   Raise HTTPException 404 if config doesn't exist.
+
+5. Add endpoints:
+
+   GET /semantic-layer/{tenant_slug}/models
+   - Load config, return list of ModelSummary objects
+
+   GET /semantic-layer/{tenant_slug}/models/{model_name}
+   - Load config, return ModelDetail for the specific model
+   - 404 if model not found
+
+   POST /semantic-layer/{tenant_slug}/query
+   - Body: SemanticQueryRequest
+   - Build SQL via QueryBuilder
+   - Execute against DuckDB with parameters
+   - Return SemanticQueryResponse with sql, data, columns, row_count
+   - Wrap in try/except: ValueError → 400, duckdb errors → 500
+
+6. Refactor existing get_semantic_layer() to use _get_db_connection()
+
+7. Add `pydantic` to dependencies in `pyproject.toml` (it comes with fastapi but
+   be explicit)
+
+Keep existing endpoints unchanged. The POST /semantic-layer/update endpoint
+stays as-is.
+
+```
+### Prompt 2.4 — Query Builder Tests
+```
+
+Create `services/platform-api/test_query_builder.py` with unit tests for the
+query builder.
+
+Load the actual tyrell_corp.yaml config for realistic testing.
+
+Tests:
+
+1. test_simple_dimensions_only — request dimensions=[source_platform,
+   report_date] from fct_tyrell_corp__ad_performance with no measures. SQL
+   should SELECT those columns with no GROUP BY.
+
+2. test_dimensions_with_measures — request dimensions=[source_platform],
+   measures=[spend, clicks] from ad_performance. SQL should have SUM(spend),
+   SUM(clicks) and GROUP BY 1.
+
+3. test_calculated_measures — request dimensions=[source_platform],
+   measures=[spend, impressions, clicks], calculated_measures=[ctr]. SQL should
+   include the CASE WHEN expression from config.
+
+4. test_count_distinct_agg — request measures=[order_id] from
+   fct_tyrell_corp__orders. Should generate COUNT(DISTINCT order_id).
+
+5. test_join — request from ad_performance with
+   joins=[dim_tyrell_corp__campaigns]. Should generate LEFT JOIN with ON clause
+   matching campaign_id AND source_platform.
+
+6. test_filters — request with filters=[{field: report_date, op: >=, value:
+   "2025-01-01"}]. SQL should include WHERE clause with parameterized value.
+
+7. test_tenant_isolation — every generated SQL must include "tenant_slug = ?" as
+   the first WHERE condition. Verify the tenant_slug is in the parameters list.
+
+8. test_invalid_dimension — request a dimension that doesn't exist in config.
+   Should raise ValueError.
+
+9. test_invalid_join — request a join to a model not in the config's joins list.
+   Should raise ValueError.
+
+10. test_invalid_filter_operator — create a QueryFilter with op="DROP TABLE" —
+    should be rejected by Pydantic validator.
+
+11. test_list_models — should return 6 models for tyrell_corp.
+
+12. test_model_summary_fields — verify name, label, description,
+    dimension_count, measure_count, has_joins are populated.
+
+Use pytest. Run with:
+`cd services/platform-api && python -m pytest test_query_builder.py -v`
+
+```
+### Prompt 2.5 — Integration Tests
+```
+
+Update `services/platform-api/test_main.py` to add integration tests for the new
+endpoints using FastAPI's TestClient.
+
+Add tests:
+
+1. test_get_models_list — GET /semantic-layer/tyrell_corp/models returns 200
+   with 6 models.
+
+2. test_get_model_detail — GET
+   /semantic-layer/tyrell_corp/models/fct_tyrell_corp__ad_performance returns
+   200 with dimensions, measures, calculated_measures, joins.
+
+3. test_get_model_not_found — GET /semantic-layer/tyrell_corp/models/nonexistent
+   returns 404.
+
+4. test_get_config_not_found — GET /semantic-layer/nonexistent_tenant/config
+   returns 404.
+
+5. test_query_endpoint_validation_error — POST /semantic-layer/tyrell_corp/query
+   with invalid dimension returns 400.
+
+6. test_query_endpoint_invalid_operator — POST with filter op="DROP" returns 422
+   (Pydantic validation).
+
+Note: The POST /query test that actually executes SQL requires a database
+connection. Skip it if MOTHERDUCK_TOKEN is not set and sandbox.duckdb doesn't
+exist:
+
+7. test_query_endpoint_executes (mark with @pytest.mark.skipif) — POST a simple
+   query, verify response has sql, data, columns, row_count fields.
+
+Keep the existing test_update_logic_integrity test unchanged.
+
+```
+---
+
+## Phase 3: Tenant-Scoped Observability
+
+### Prompt 3.1 — Tenant-Scoped dbt Models
+```
+
+Create two new dbt models in
+`warehouse/gata_transformation/models/platform/observability/`:
+
+1. `int_platform_observability__tenant_run_results.sql`:
+
+{{ config(materialized='table') }}
+
+WITH tenant_models AS ( SELECT invocation_id, dlt_load_id, node_id, node_name,
+run_result_status, rows_affected, execution_time_seconds, run_started_at, CASE
+WHEN node_name LIKE '%tyrell_corp%' THEN 'tyrell_corp' WHEN node_name LIKE
+'%wayne_enterprises%' THEN 'wayne_enterprises' WHEN node_name LIKE
+'%stark_industries%' THEN 'stark_industries' ELSE NULL END AS tenant_slug FROM
+{{ ref('int_platform_observability__run_results') }} )
+
+SELECT tenant_slug, node_name AS model_name, run_result_status AS status,
+rows_affected, execution_time_seconds, run_started_at, dlt_load_id FROM
+tenant_models WHERE tenant_slug IS NOT NULL
+
+2. `int_platform_observability__tenant_test_results.sql`:
+
+{{ config(materialized='table') }}
+
+WITH tenant_tests AS ( SELECT invocation_id, node_id, node_name, test_status,
+test_message, execution_time_seconds, run_started_at, CASE WHEN node_name LIKE
+'%tyrell_corp%' THEN 'tyrell_corp' WHEN node_name LIKE '%wayne_enterprises%'
+THEN 'wayne_enterprises' WHEN node_name LIKE '%stark_industries%' THEN
+'stark_industries' ELSE NULL END AS tenant_slug FROM {{
+ref('int_platform_observability__test_results') }} )
+
+SELECT tenant_slug, node_name AS test_name, test_status AS status, test_message
+AS message, execution_time_seconds, run_started_at FROM tenant_tests WHERE
+tenant_slug IS NOT NULL
+
+After creating both files, run:
+`cd warehouse/gata_transformation && uv run --env-file ../../.env dbt run --target sandbox --select int_platform_observability__tenant_run_results int_platform_observability__tenant_test_results`
+
+Verify both models compile and run successfully.
+
+```
+### Prompt 3.2 — Observability API Endpoints
+```
+
+Add observability endpoints to `services/platform-api/main.py`.
+
+Add these Pydantic models to `services/platform-api/models.py`:
+
+1. `ObservabilitySummary`:
+   - tenant_slug: str
+   - models_count: int
+   - last_run_at: str | None
+   - pass_count: int
+   - fail_count: int
+   - error_count: int
+   - skip_count: int
+   - avg_execution_time: float
+
+2. `RunResult`:
+   - model_name: str
+   - status: str
+   - rows_affected: int | None
+   - execution_time_seconds: float
+   - run_started_at: str
+
+3. `TestResult`:
+   - test_name: str
+   - status: str
+   - message: str | None
+   - execution_time_seconds: float
+   - run_started_at: str
+
+4. `IdentityResolutionStats`:
+   - tenant_slug: str
+   - total_users: int
+   - resolved_customers: int
+   - anonymous_users: int
+   - resolution_rate: float
+   - total_events: int
+   - total_sessions: int
+
+Add endpoints to main.py:
+
+GET /observability/{tenant_slug}/summary
+
+- Query int_platform_observability__tenant_run_results for the tenant
+- Aggregate: count distinct models, last run_started_at, count by status, avg
+  execution_time
+- Return ObservabilitySummary
+
+GET /observability/{tenant_slug}/runs
+
+- Query int_platform_observability__tenant_run_results WHERE tenant_slug = ?
+- Return list[RunResult] ordered by run_started_at DESC
+- Optional query param: limit (default 50)
+
+GET /observability/{tenant_slug}/tests
+
+- Query int_platform_observability__tenant_test_results WHERE tenant_slug = ?
+- Return list[TestResult] ordered by run_started_at DESC
+- Optional query param: limit (default 50)
+
+GET /observability/{tenant_slug}/identity-resolution
+
+- Query int_platform_observability__identity_resolution_stats WHERE tenant_slug
+  = ?
+- Return IdentityResolutionStats (latest row by dlt_load_id)
+
+All endpoints use _get_db_connection() for database access. Return 404 if no
+data found for tenant.
+
+````
+---
+
+## Verification Checklist
+
+After all phases complete, run these checks:
+
+```bash
+# Phase 1 — Rill removed
+dir services\rill-dashboard  # Should not exist
+
+# Phase 2 — API starts and responds
+cd services\platform-api
+uvicorn main:app --reload
+# In another terminal:
+curl http://localhost:8000/semantic-layer/tyrell_corp/models
+curl http://localhost:8000/semantic-layer/tyrell_corp/models/fct_tyrell_corp__ad_performance
+curl -X POST http://localhost:8000/semantic-layer/tyrell_corp/query -H "Content-Type: application/json" -d "{\"model\": \"fct_tyrell_corp__ad_performance\", \"dimensions\": [\"source_platform\"], \"measures\": [\"spend\", \"clicks\"]}"
+
+# Phase 2 — Tests pass
+python -m pytest test_query_builder.py test_main.py -v
+
+# Phase 3 — dbt models compile
+cd warehouse\gata_transformation
+uv run --env-file ..\..\env dbt compile --target sandbox --select int_platform_observability__tenant_run_results int_platform_observability__tenant_test_results
+
+# Phase 3 — Observability endpoints
+curl http://localhost:8000/observability/tyrell_corp/summary
+curl http://localhost:8000/observability/tyrell_corp/identity-resolution
+````
 
 ---
 
-### Phase 6: Observability & Metadata Capture 
+## Files Summary
 
-**Goal:** Capture dbt execution artifacts for downstream automation and semantic layer population.
-
-**Delivered:**
-- `macros/dbt_metadata/metadata_ops.sql` — on-run-end hooks
-  - `init_artifact_tables()` — creates artifact tables on first run
-  - `upload_model_definitions()` — captures model DAG, dependencies, config, tags
-  - `upload_run_results()` — captures execution status, timing, rows affected
-  - `upload_test_definitions()` — captures test definitions and targets
-- Observability models in `models/platform/observability/`:
-  - Source, staging, and intermediate models for model definitions, run results, test results
-  - `int_platform_observability__md_table_stats.sql` — MotherDuck table statistics
-  - `int_platform_observability__source_candidate_map.sql` — source-to-master-model mapping
-
----
-
-### Phase 7: dlt → dbt Integration 
-
-**Goal:** Wire dlt ingestion to dbt transformation in a single pipeline.
-
-**Delivered:**
-- `main.py` at project root uses `dlt.helpers.dbt.create_runner()` with `credentials=None` and `package_profiles_dir` to bypass dlt credential injection and use existing `profiles.yml` directly
-- `profiles.yml` configured with `sandbox` (local DuckDB file) and `dev` (MotherDuck) targets
-- Pipeline: dlt lands data → triggers dbt run → on-run-end hooks capture metadata
+| File                                                                              | Action | Phase |
+| --------------------------------------------------------------------------------- | ------ | ----- |
+| `services/rill-dashboard/`                                                        | DELETE | 1     |
+| `services/mock-data-engine/utils/bsl_mapper.py`                                   | MODIFY | 1     |
+| `services/platform-api/models.py`                                                 | CREATE | 2     |
+| `services/platform-api/query_builder.py`                                          | CREATE | 2     |
+| `services/platform-api/main.py`                                                   | MODIFY | 2 + 3 |
+| `services/platform-api/pyproject.toml`                                            | MODIFY | 2     |
+| `services/platform-api/test_query_builder.py`                                     | CREATE | 2     |
+| `services/platform-api/test_main.py`                                              | MODIFY | 2     |
+| `warehouse/.../observability/int_platform_observability__tenant_run_results.sql`  | CREATE | 3     |
+| `warehouse/.../observability/int_platform_observability__tenant_test_results.sql` | CREATE | 3     |
 
 ---
 
-### Phase 8: In-Browser Semantic Layer (Tier 1) 
+## Dependency Order
 
-**Goal:** Build a self-contained text-to-SQL engine that runs entirely client-side.
+```
+Phase 1 (Rill cleanup) ──→ Phase 2 (Query builder + endpoints) ──→ Frontend ready
+                       \
+                        ──→ Phase 3 (Observability) ──→ Frontend ready
+```
 
-**Delivered:**
-- `semantic-profiler.ts` — auto-profiles tables via DuckDB `SUMMARIZE`, infers field categories, detects castable types
-- `semantic-config.ts` — metadata registry, SQL prompt generation, dimension/measure lookup functions
-- `semantic-objects.ts` — `SemanticReportObj` class translates dimension/measure aliases to SQL, executes against DuckDB WASM
-- `semantic-query-validator.ts` — validates LLM-generated SQL against metadata, generates correction prompts
-- `webllm-handler.ts` — `WebLLMSemanticHandler` manages Qwen 2.5 Coder (3B/7B) in-browser, with retry loop and validation
-- `semantic-catalog-generator.ts` — generates LLM prompts with grouped dimension/measure catalogs
-- `slice-object-generator.ts` — generates WebDataRocks pivot table configurations from query results
-- Pre-built metadata JSONs for sessions and users tables
-- LaunchDarkly integration for model tier selection and validation strategy flags
-
-**Key Files:**
-- `app/utils/smarter/dashboard_utils/semantic-config.ts`
-- `app/utils/smarter/dashboard_utils/semantic-objects.ts`
-- `app/utils/smarter/dashboard_utils/semantic-query-validator.ts`
-- `app/utils/smarter/autovisualization_dashboard/webllm-handler.ts`
-- `app/utils/system/semantic-profiler.ts`
-
----
-
-## In Progress
-
-### Phase 9: Backend Semantic Layer (Tier 2) — BSL Integration 
-
-**Goal:** Auto-generate Boring Semantic Layer definitions from dbt metadata and serve via FastAPI with MCP support.
-
-**Status:** Architecture defined. Existing scaffolding in place. Implementation pending.
-
-#### 9.1 BSL Population Script (Not Started)
-Post-dbt-run Python script that:
-1. Reads `model_artifacts__current` to discover `fct_*` and `dim_*` models per tenant
-2. Runs `DESCRIBE` + `SUMMARIZE` against each analytics table
-3. Reads `tenants.yaml` for tenant-specific context (conversion events, source mix)
-4. Infers join paths from shared column names across fact and dimension tables
-5. Generates BSL definition files per tenant (dimensions, measures, relationships, derived metrics)
-
-**Expected Join Paths:**
-- `fct_ad_performance` ↔ `dim_campaigns` on `campaign_id` + `source_platform` (many-to-one)
-- `fct_sessions` ↔ `fct_orders` on `transaction_id` (one-to-one where exists)
-- `fct_sessions` ↔ `dim_campaigns` on `traffic_campaign` ≈ `campaign_name` (attribution join)
-
-**Expected Derived Metrics:**
-- ROAS = revenue from sessions/orders ÷ spend from ad performance
-- CAC = total spend ÷ converting sessions
-- Conversion Rate = converting sessions ÷ total sessions
-
-**Depends On:** `boring-semantic-layer` package (pip install), `ibis-framework`
-
-#### 9.2 FastAPI Endpoint Upgrade (Partially Scaffolded)
-Current state: `services/platform-api/main.py` has stub endpoints:
-- `GET /semantic-layer/{tenant_slug}` — currently queries `platform_ops__boring_semantic_layer` (needs repurposing)
-- `POST /semantic-layer/update` — triggers tenants.yaml update + dbt run
-
-**Needed:**
-- Swap raw schema query for BSL-powered endpoints
-- `GET /semantic-layer/{tenant}/dimensions` — list available dimensions with descriptions
-- `GET /semantic-layer/{tenant}/measures` — list available measures with descriptions
-- `POST /semantic-layer/{tenant}/query` — execute semantic query, return data + generated SQL
-- `GET /semantic-layer/{tenant}/relationships` — list join paths between tables
-
-#### 9.3 MCP Endpoint (Not Started)
-Expose BSL as MCP tools for AI agent consumption:
-- `list_metrics()` — returns all available measures
-- `get_dimension_values(dimension_name)` — returns distinct values for filtering
-- `query(metrics, dimensions, filters)` — executes governed semantic query
-- Standard MCP protocol so any AI agent (Claude, GPT, open-source) can consume
-
----
-
-## Upcoming
-
-### Phase 10: Full Pipeline Validation
-
-**Goal:** End-to-end test: mock data generation → dlt ingestion → dbt run → analytics tables materialized → BSL populated → API serving.
-
-**Tasks:**
-- [ ] Run `dbt run --target sandbox` to validate full pipeline compiles for both active tenants
-- [ ] Verify engine/factory output matches canonical schemas
-- [ ] Verify intermediate models correctly filter by tenant_slug + source_platform
-- [ ] Verify analytics tables contain only the expected tenant's data
-- [ ] Verify observability hooks capture model definitions and run results
-- [ ] Smoke test BSL population script against materialized analytics tables
-
----
-
-### Phase 11: Stark Industries Onboarding (Third Tenant)
-
-**Goal:** Prove the platform handles a third tenant with new source combinations (WooCommerce + Facebook/Instagram + Mixpanel).
-
-**Tasks:**
-- [ ] Generate mock data for WooCommerce orders/products and Mixpanel events/people
-- [ ] Run `onboard_tenant.py` for stark_industries
-- [ ] Verify scaffolded source/staging/intermediate models
-- [ ] Create analytics shell models: `fct_stark_industries__ad_performance`, `fct_stark_industries__orders`, `fct_stark_industries__sessions`, `dim_stark_industries__campaigns`
-- [ ] Run `dbt run` and verify all 3 tenants build correctly
-- [ ] Verify BSL picks up the new tenant automatically
-
-**New Engine Coverage:**
-- WooCommerce engine (`engine_woocommerce`) already exists but untested with real tenant
-- Mixpanel engine (`engine_mixpanel`) already exists but untested with real tenant
-- Stripe charge ID extraction from WooCommerce `meta_data` for reliable transaction linking
-
----
-
-### Phase 12: Frontend ↔ Backend Integration
-
-**Goal:** Connect the Deno/Fresh app to the FastAPI backend for multi-table analytics.
-
-**Tasks:**
-- [ ] Frontend route for selecting query tier (single-table WASM vs multi-table backend)
-- [ ] API client in `app/utils/services/` for FastAPI semantic endpoints
-- [ ] Dashboard component that renders BSL query results using existing chart infrastructure
-- [ ] Tenant context switching — use authenticated user's tenant_slug to scope API calls
-- [ ] Fall-through: if WebLLM detects a multi-table query pattern (mentions of joins, cross-domain metrics), suggest switching to Tier 2
-
-**Existing Infrastructure to Leverage:**
-- `app/utils/services/motherduck-client.ts` — already handles server-side MotherDuck queries
-- `app/routes/api/motherduck-token.ts` — token endpoint for MotherDuck access
-- `app/islands/dashboard/smarter_dashboard/CustomDataDashboard.tsx` — main dashboard component
-- `app/islands/onboarding/DashboardRouter.tsx` — routes between dashboard experiences
-
----
-
-### Phase 13: MotherDuck AI Integration
-
-**Goal:** Use MotherDuck's AI features (e.g., `prompt()`) with BSL context for complex queries.
-
-**Tasks:**
-- [ ] Feed BSL definitions as context to MotherDuck AI endpoints
-- [ ] Compare MotherDuck AI-generated SQL vs BSL-generated SQL for accuracy
-- [ ] Evaluate latency tradeoffs: BSL generates SQL locally vs MotherDuck generates remotely
-- [ ] Hybrid approach: BSL handles standard metric queries, MotherDuck AI handles exploratory/ad-hoc
-
----
-
-### Phase 14: Tenant Self-Service Onboarding
-
-**Goal:** A new user signs up in the Deno/Fresh app, selects their data sources, and the platform provisions their pipeline without manual intervention.
-
-**Tasks:**
-- [ ] Onboarding UI: source selection screen backed by `supported_connectors.yaml`
-- [ ] API endpoint: `POST /tenants/onboard` — writes to `tenants.yaml`, triggers `onboard_tenant.py`, runs dbt
-- [ ] OAuth connector flows for real data sources (replacing mock data)
-- [ ] Progress tracking: user sees pipeline status (ingesting → transforming → ready)
-- [ ] BSL auto-generation triggers when analytics tables are first materialized
-
----
-
-## Architecture Debt & Known Issues
-
-### Identified Improvements
-1. **Ecommerce-Stripe linking** — Current ecommerce factory uses fragile amount/date/currency matching between ecommerce and Stripe data. Should extract Stripe charge ID directly from order objects (available in Shopify `note_attributes` and WooCommerce `meta_data`).
-2. **`platform_ops__boring_semantic_layer.sql`** — Currently a stub pulling from source schema history. Needs repurposing or replacing with BSL population output.
-3. **Stark Industries not yet scaffolded** — Defined in `tenants.yaml` but source/staging/intermediate/analytics models not yet created.
-4. **No automated testing** — dbt tests defined in observability but not yet wired into CI/CD.
-5. **Analytics models hardcoded** — Each tenant's analytics shell models are manually created. Could be auto-generated from `tenants.yaml` + factory registry.
-
-### Technical Debt
-- `.agent/` directory from earlier AI-assisted development may contain outdated workflows — should be audited
-- Some earlier unified multi-tenant intermediate models were deleted (broke tenant isolation) — git history contains remnants
-- `services/rill-dashboard/` is optional/experimental and may not reflect current model structure
-
----
-
-## Model Count Summary
-
-| Layer | Tyrell Corp | Wayne Enterprises | Stark Industries | Platform | Total |
-|:------|:------------|:------------------|:-----------------|:---------|:------|
-| Sources | 5 _sources.yml | 4 _sources.yml | — | — | 9 |
-| Staging | 16 | 12 | — | — | 28 |
-| Master Models | — | — | — | 31 | 31 |
-| Hubs | — | — | — | 1 | 1 |
-| Satellites | — | — | — | 3 | 3 |
-| Ops | — | — | — | 4 | 4 |
-| Observability | — | — | — | 9 | 9 |
-| Intermediate | 16 | 12 | — | — | 28 |
-| Analytics | 4 | 4 | — | — | 8 |
-| **Total** | **41** | **32** | **0** | **48** | **121** |
+Phases 2 and 3 can run in parallel after Phase 1. The frontend integration
+(Phase 4 from the original plan) depends on both being complete.

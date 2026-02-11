@@ -63,3 +63,7 @@ models:
       +tags: ["reporting"]
     platform:
       +materialized: table
+      master_models:
+        +materialized: incremental
+        +full_refresh: false
+        +tags: ['master_model']

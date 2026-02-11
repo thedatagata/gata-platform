@@ -21,8 +21,8 @@ analytics/{tenant}/              → Star schema (facts + dims) via engine/facto
 
 ### Engine/Factory Pattern (Shell Architecture)
 - **Engines** (`macros/engines/{domain}/`): Source-specific SQL that reads from intermediate models and outputs a canonical column set. Example: `engine_facebook_ads_performance(tenant_slug)` reads `int_{tenant}__facebook_ads_facebook_insights` and outputs `tenant_slug, source_platform, report_date, campaign_id, ad_group_id, ad_id, spend, impressions, clicks, conversions`.
-- **Factories** (`macros/factories/`): Union engines together. Example: `build_fct_ad_performance('tyrell_corp', ['facebook_ads', 'google_ads'])` calls both engines and UNION ALLs the results.
-- **Shell Models** (`models/analytics/{tenant}/`): Thin SQL files that call a factory. Example: `{{ build_fct_ad_performance('tyrell_corp', ['facebook_ads', 'google_ads', 'instagram_ads']) }}`
+- **Factories** (`macros/factories/`): Config-driven engine discovery. Call `get_tenant_config(tenant_slug)` to find enabled sources, then dynamically resolve engine macros via `context.get('engine_' ~ source ~ '_performance')`. Example: `build_fct_ad_performance('tyrell_corp')` discovers facebook_ads, google_ads, instagram_ads from config and UNION ALLs their engine outputs.
+- **Shell Models** (`models/analytics/{tenant}/`): Single-line SQL files that call a factory with only the tenant slug. Example: `{{ build_fct_ad_performance('tyrell_corp') }}`
 
 ### JSON Extraction (DuckDB Syntax)
 All master models store raw data in a `raw_data_payload` JSON column. Intermediate models extract typed fields:
@@ -34,6 +34,27 @@ raw_data_payload->'$.nested_object'                     -- keep as JSON
 
 ### Push Circuit (sync_to_master_hub)
 Staging models are views that SELECT from sources. A `post_hook` in `generate_staging_pusher` calls `sync_to_master_hub(master_model_id)` which does a MERGE INTO the master model table USING the staging view. The post-hook ensures the view exists before the MERGE fires. Master model tables must exist before staging models can push to them.
+
+### Master Model Incremental Pattern
+Master models use `materialized='incremental'` with `full_refresh=false` to retain historical data across runs. The mechanism:
+1. **First run** → dbt creates the table (SELECT ... WHERE 1=0 produces the empty schema)
+2. **Staging post-hooks** → `sync_to_master_hub()` MERGEs data in (deduped by tenant + platform + payload hash)
+3. **Subsequent runs** → dbt sees table exists, runs incremental append (0 new rows), existing data untouched
+4. **Staging post-hooks** → MERGE inserts only genuinely new rows
+
+**`full_refresh=false`** means `dbt run --full-refresh` will NOT drop master models. This is intentional — master models are append-only sinks. To truly reset one, DROP the table manually in the warehouse.
+
+**Safe refresh commands:**
+```bash
+# Refresh reporting layer only (most common)
+dbt run --selector reporting_refresh
+
+# Full refresh everything EXCEPT master models
+dbt run --full-refresh --selector safe_full_refresh
+
+# Inspect master models (rarely needed)
+dbt run --selector master_models_only
+```
 
 ### Staging Pusher (generate_staging_pusher)
 The macro in `macros/onboarding/generate_staging_pusher.sql` creates staging views that:
@@ -105,9 +126,9 @@ Example: `uv run --env-file ../../.env dbt run --target dev`
 - Data landed via `dlt.destinations.duckdb(credentials=sandbox_path)` in orchestrator
 
 ### Execution Order Note
-On a full `dbt run`, master model tables are recreated empty (they are `WHERE 1=0` seeds), then staging MERGE post-hooks repopulate them. Intermediate models may execute before staging post-hooks fire, resulting in empty intermediate/analytics tables. **Fix:** Run a second pass for the reporting layer:
+With `materialized='incremental'` and `full_refresh=false`, master models retain data across runs. However, on a **first-ever run** (or after a manual table drop), master models start empty and staging MERGE post-hooks populate them. Intermediate models may execute before staging post-hooks fire, resulting in empty intermediate/analytics tables on the first pass. **Fix:** Use the reporting_refresh selector for a second pass:
 ```bash
-uv run --env-file ../../.env dbt run --target <target> --select "models/intermediate models/analytics models/platform/ops/platform_ops__boring_semantic_layer.sql"
+uv run --env-file ../../.env dbt run --target <target> --selector reporting_refresh
 ```
 
 ## Onboarding Workflow (sandbox)
@@ -175,6 +196,7 @@ These track tenant config changes at table-level granularity (tenant + source + 
 4. **Sandbox target not working — FIXED:** Scripts now route to `warehouse/sandbox.duckdb` when target is `sandbox`. Orchestrator uses `dlt.destinations.duckdb(credentials=path)` to land data in the correct file.
 5. **`tojson` quoting bug — FIXED:** Analytics engines were using `tojson` which produces double quotes. Fixed to use single-quote wrapping via `{% for %}` loop.
 6. **Windows cp1252 emoji crashes — FIXED:** Replaced emoji characters in Python scripts with ASCII-safe `[TAG]` prefixes.
+7. **Master model historical data loss — FIXED:** Changed master models from `materialized='table'` to `materialized='incremental'` with `full_refresh=false`. Added `selectors.yml` with `safe_full_refresh` and `reporting_refresh` selectors. Master models now retain data across runs; `--full-refresh` is blocked at the model level.
 
 ## Conventions
 

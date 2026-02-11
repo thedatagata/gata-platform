@@ -15,6 +15,18 @@ sys.path.append(str(PROJECT_ROOT / "services" / "mock-data-engine"))
 from orchestrator import MockOrchestrator
 from config import load_manifest
 
+MASTER_MODELS_DIR = DBT_PROJECT_DIR / "models" / "platform" / "master_models"
+MASTER_MODEL_TEMPLATE = "{{ generate_master_model() }}\n"
+
+def ensure_master_model_file(master_model_id: str):
+    """Create the dbt master model .sql file if it doesn't already exist."""
+    MASTER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    model_file = MASTER_MODELS_DIR / f"platform_mm__{master_model_id}.sql"
+    if not model_file.exists():
+        model_file.write_text(MASTER_MODEL_TEMPLATE)
+        print(f"[NEW] Created master model file: platform_mm__{master_model_id}.sql")
+    return model_file
+
 def load_env_file():
     env_path = PROJECT_ROOT / ".env"
     if env_path.exists():
@@ -120,6 +132,9 @@ def generate_scaffolding(tenant_slug, target, days=30):
         if master_model_id == 'unknown':
             print(f"[WARN] DNA {schema_hash[:8]} unknown for {table_name}. Skipping.")
             continue
+
+        # 2b. Ensure master model .sql file exists
+        ensure_master_model_file(master_model_id)
 
         # 3. Create Staging Pusher
         stg_dir = DBT_PROJECT_DIR / "models" / "staging" / tenant_slug / matched_source
