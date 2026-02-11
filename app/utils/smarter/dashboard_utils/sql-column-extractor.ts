@@ -176,14 +176,14 @@ export function validateSQLColumns(
   const suggestions: string[] = [];
   
   if (aliasErrors.length > 0) {
-    suggestions.push("⚠️  You used alias names instead of source columns:");
+    suggestions.push("  You used alias names instead of source columns:");
     aliasErrors.forEach(err => {
       suggestions.push(`  • ${err.usedAlias} → ${err.correction}`);
     });
   }
   
   if (unknownColumns.length > 0) {
-    suggestions.push(`❌ Unknown columns: ${unknownColumns.join(", ")}`);
+    suggestions.push(` Unknown columns: ${unknownColumns.join(", ")}`);
     
     // Try to find similar field names
     const allFields = Object.keys(metadata.fields);
@@ -193,7 +193,7 @@ export function validateSQLColumns(
         unknownCol.toLowerCase().includes(f.toLowerCase())
       );
       if (similar.length > 0) {
-        suggestions.push(`  💡 Did you mean: ${similar.slice(0, 3).join(", ")}?`);
+        suggestions.push(`   Did you mean: ${similar.slice(0, 3).join(", ")}?`);
       }
     });
   }
@@ -225,7 +225,7 @@ export function generateCorrectionPrompt(
   
   // Explain alias errors with field metadata
   if (validation.aliasErrors.length > 0) {
-    prompt += `❌ ALIAS ERRORS - You used user-facing alias names, but SQL needs source column names with transformations:\n\n`;
+    prompt += ` ALIAS ERRORS - You used user-facing alias names, but SQL needs source column names with transformations:\n\n`;
     
     validation.aliasErrors.forEach(err => {
       const sourceMapping = findSourceFieldByAlias(err.usedAlias, table);
@@ -255,7 +255,7 @@ export function generateCorrectionPrompt(
   
   // Explain unknown columns
   if (validation.unknownColumns.length > 0) {
-    prompt += `❌ UNKNOWN COLUMNS: ${validation.unknownColumns.join(", ")}\n`;
+    prompt += ` UNKNOWN COLUMNS: ${validation.unknownColumns.join(", ")}\n`;
     prompt += `These don't exist in the catalog. Available fields: ${Object.keys(metadata.fields).slice(0, 15).join(", ")}...\n\n`;
   }
   

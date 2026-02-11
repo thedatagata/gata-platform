@@ -68,7 +68,7 @@ export class SemanticReportObj {
       ${opts.limit ? `LIMIT ${opts.limit}` : ""}
     `.trim();
 
-    console.log("🔍 [SemanticTable] Generated SQL:", sql);
+    console.log(" [SemanticTable] Generated SQL:", sql);
 
     const database = (this.db as { query: (sql: string) => Promise<{ toArray: () => Record<string, unknown>[] }> });
     const result = await database.query(sql);
@@ -77,7 +77,7 @@ export class SemanticReportObj {
     // Sanitize data (handle Uint8Array and BigInt)
     const sanitized = rows.map((row: Record<string, unknown>) => sanitizeRow(row, this.metadata));
     
-    console.log(`✅ [SemanticTable] Query returned ${sanitized.length} rows`);
+    console.log(` [SemanticTable] Query returned ${sanitized.length} rows`);
     return sanitized;
   }
 

@@ -139,7 +139,7 @@ function sanitizeValue(value: unknown): unknown {
  */
 export async function profileTable(db: { query?: (sql: string) => Promise<unknown>; evaluateQuery?: (sql: string) => Promise<unknown> }, tableName: string): Promise<SemanticLayer> {
 
-  console.log(`🔍 Profiling table: ${tableName}`);
+  console.log(` Profiling table: ${tableName}`);
   
   // Helper to extract rows from different DuckDB result formats
   const getRows = (result: unknown): Record<string, unknown>[] => {
@@ -217,7 +217,7 @@ export async function profileTable(db: { query?: (sql: string) => Promise<unknow
         isCastableToTime = !!(rowsT[0] as Record<string, unknown>)?.is_time;
 
         if (isCastableToTime) {
-           console.log(`✨ Auto-detected time string: ${colName}`);
+           console.log(` Auto-detected time string: ${colName}`);
         } else {
              // 1. Check Numeric (Ensuring at least one non-null row exists)
             const castCheck = await queryFn(`SELECT COUNT(*) > 0 AND COUNT(*) = COUNT(TRY_CAST("${colName}" AS DOUBLE)) as is_numeric FROM ${tableName} WHERE "${colName}" IS NOT NULL`);
@@ -240,7 +240,7 @@ export async function profileTable(db: { query?: (sql: string) => Promise<unknow
                     const rowsF = getRows(fmtCheck);
                     if (!!(rowsF[0] as Record<string, unknown>)?.is_fmt) {
                       isCastableToDate = true;
-                      console.log(`✨ Detected date format ${fmt} for ${colName}`);
+                      console.log(` Detected date format ${fmt} for ${colName}`);
                       break;
                     }
                   } catch (_err) {
@@ -261,7 +261,7 @@ export async function profileTable(db: { query?: (sql: string) => Promise<unknow
     if ((isNumeric || isCastableToNumeric) && !isCastableToTime) {
       ingestType = 'number';
       if (isCastableToNumeric) {
-        console.log(`✨ Auto-detected numerical string: ${colName}`);
+        console.log(` Auto-detected numerical string: ${colName}`);
       }
       // Heuristic: If it has many values, or is clearly an ID, or has a measure-like name, it's numerical/continuous.
       // Otherwise, if cardinality is low (<= 14), we assume it's a categorical factor/enum.
@@ -277,14 +277,14 @@ export async function profileTable(db: { query?: (sql: string) => Promise<unknow
       category = 'temporal';
       ingestType = isDate ? 'timestamp' : 'string';
       if (isCastableToDate) {
-        console.log(`✨ Auto-detected temporal string (Date): ${colName}`);
+        console.log(` Auto-detected temporal string (Date): ${colName}`);
       }
     } else if (isTime || isCastableToTime) {
        // We treat pure time columns as categorical for now, or a separate temporal type if supported later
        // But critically, we do NOT want them to be the primary 'temporal' column for "Last 90 Days" analysis
        category = 'categorical'; // Downgrade to categorical to avoid it grabbing the spotlight
        ingestType = 'string';
-       console.log(`✨ Auto-detected time string (Downgrading to Categorical): ${colName}`);
+       console.log(` Auto-detected time string (Downgrading to Categorical): ${colName}`);
     } else if (colType.includes('BOOL')) {
       category = 'categorical';
       ingestType = 'boolean';

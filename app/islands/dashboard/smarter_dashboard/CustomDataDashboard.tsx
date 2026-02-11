@@ -64,7 +64,7 @@ export default function CustomDataDashboard({
     registerCustomMetadata(semanticConfig);
     
     async function initializeDashboard() {
-      console.log("🚀 Initializing Dashboard with Automated Insights V2.5-SMART-TEMPORAL", { tableName, seedingInfo });
+      console.log(" Initializing Dashboard with Automated Insights V2.5-SMART-TEMPORAL", { tableName, seedingInfo });
       // Load persisting items first
       const existingPins = await loadPinnedItems(tableName);
       setPinnedItems(existingPins);
@@ -303,7 +303,7 @@ export default function CustomDataDashboard({
             ← Back to Origin
           </button>
           <h1 class="text-3xl font-black text-gata-cream italic tracking-tighter uppercase flex items-center gap-3">
-             <span class="text-gata-green">📊</span> {tableName} Workspace
+             <span class="text-gata-green"></span> {tableName} Workspace
              <span class="ml-4 px-2 py-0.5 bg-gata-green text-gata-dark text-[10px] font-black rounded-full animate-pulse">V2.5-SMART-TEMPORAL</span>
           </h1>
           {metadata && <p class="text-xs text-gata-cream/40 font-medium uppercase tracking-[0.2em] mt-1">{metadata.description}</p>}
@@ -323,7 +323,7 @@ export default function CustomDataDashboard({
       
       {initialAnalysisError && (
         <div class="px-8 py-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 text-xs font-mono">
-           ⚠️ Initial analytical sweep failed: {initialAnalysisError}
+            Initial analytical sweep failed: {initialAnalysisError}
         </div>
       )}
 
@@ -388,7 +388,7 @@ export default function CustomDataDashboard({
         )}
         
         <div class={`bg-gata-dark/40 ${seedingInfo ? 'md:col-span-2' : 'md:col-span-3'} p-8 rounded-3xl border border-gata-green/10 flex flex-col justify-center relative overflow-hidden group`}>
-            <div class="absolute top-0 right-0 p-8 text-4xl opacity-5 grayscale group-hover:scale-110 transition-transform">🤖</div>
+            <div class="absolute top-0 right-0 p-8 text-4xl opacity-5 grayscale group-hover:scale-110 transition-transform"></div>
             <p class="text-xl font-black text-gata-cream italic leading-tight mb-6">"{initialInsight}"</p>
             <div class="grid md:grid-cols-3 gap-4">
                 {recommendations.map((rec, i) => (
@@ -451,7 +451,7 @@ export default function CustomDataDashboard({
 
       {/* Semantic Layer Summary Table */}
       <div class="bg-gata-dark/40 border border-gata-green/10 rounded-3xl p-8 shadow-sm backdrop-blur-sm space-y-6">
-        <h3 class="text-[10px] font-black text-gata-green uppercase tracking-[0.4em]">📋 Semantic Layer Architecture</h3>
+        <h3 class="text-[10px] font-black text-gata-green uppercase tracking-[0.4em]"> Semantic Layer Architecture</h3>
         <div class="bg-gata-dark/40 rounded-2xl border border-gata-green/5 overflow-hidden">
           <div class="overflow-x-auto max-h-80">
             <table class="min-w-full text-left">
@@ -485,7 +485,7 @@ export default function CustomDataDashboard({
 
       {/* AI Exploration Section (Traditional Prompt Style) */}
       <div class="bg-gata-dark/60 border-2 border-gata-green/20 rounded-[3rem] p-10 shadow-2xl space-y-8 backdrop-blur-xl relative overflow-hidden group">
-        <div class="absolute top-0 right-0 p-12 text-6xl opacity-10 group-hover:rotate-12 transition-transform">✨</div>
+        <div class="absolute top-0 right-0 p-12 text-6xl opacity-10 group-hover:rotate-12 transition-transform"></div>
         <div>
            <h3 class="text-2xl font-black text-gata-cream italic uppercase tracking-tighter">AI Discovery <span class="text-gata-green">Analyis</span></h3>
            <p class="text-xs text-gata-cream/40 font-medium uppercase mt-1 tracking-widest">Interact with your personal data analyst in plain English</p>
@@ -588,7 +588,7 @@ export default function CustomDataDashboard({
                      onClick={handlePin}
                      class="px-6 py-3 bg-gata-green text-gata-dark font-black rounded-xl text-[10px] uppercase tracking-widest hover:bg-gata-hover transition-all"
                    >
-                     📌 PIN TO DASHBOARD
+                      PIN TO DASHBOARD
                    </button>
                 </div>
                 <div class="bg-gata-darker/60 rounded-[2rem] p-8 border border-gata-green/5 shadow-inner">

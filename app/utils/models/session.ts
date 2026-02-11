@@ -29,7 +29,7 @@ export async function createSession(username: string): Promise<Session> {
     return createSession(username);
   }
   
-  console.log(`🔐 Created session for ${username}: ${sessionId}`);
+  console.log(` Created session for ${username}: ${sessionId}`);
   return session;
 }
 
@@ -51,7 +51,7 @@ export async function getSession(sessionId: string): Promise<Session | null> {
 export async function deleteSession(sessionId: string): Promise<void> {
   const kv = await getKv();
   await kv.delete(["sessions", sessionId]);
-  console.log(`🔓 Deleted session: ${sessionId}`);
+  console.log(` Deleted session: ${sessionId}`);
 }
 export async function deleteSessionsForUser(username: string): Promise<void> {
   const kv = await getKv();
@@ -68,6 +68,6 @@ export async function deleteSessionsForUser(username: string): Promise<void> {
   
   if (count > 0) {
     await atomic.commit();
-    console.log(`🧹 Revoked ${count} sessions for user: ${username}`);
+    console.log(` Revoked ${count} sessions for user: ${username}`);
   }
 }

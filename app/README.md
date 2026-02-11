@@ -1047,7 +1047,7 @@ additions and comprehensive event tracking.
 
 ### Implementation Status
 
-**✅ Stage 1: Foundation & Core Tracking (COMPLETED)**
+** Stage 1: Foundation & Core Tracking (COMPLETED)**
 
 Established the experience routing infrastructure with the `analytics-experience` flag directing
 users to Starter or Smarter experiences. Implemented the consolidated six-event tracking model
@@ -1061,7 +1061,7 @@ Key deliverables:
 - Session tracking on landing page
 - Route change tracking throughout app
 
-**✅ Stage 2: Starter Experience Features (COMPLETED)**
+** Stage 2: Starter Experience Features (COMPLETED)**
 
 Added feature gates and upgrade flows for the Starter experience. Implemented AI query access
 control through `starter-ai-query-access` flag. Created reusable `UpgradeModal` component for
@@ -1075,7 +1075,7 @@ Key deliverables:
 - Data limit tracking with `starter-data-limit` flag
 - Conversion funnel tracking for upgrade flows
 
-**⚠️ Stage 3: Smarter Experience Features (75% COMPLETE)**
+** Stage 3: Smarter Experience Features (75% COMPLETE)**
 
 Enhanced the Smarter experience with model tier selection, query validation strategies, and
 persistence capabilities. The `smarter-model-tier` flag controls whether users receive the 3B or 7B
@@ -1085,10 +1085,10 @@ assistant through `smarter-ai-analyst-access` provides automated insights.
 
 Key deliverables:
 
-- ✅ Model tier gating with `smarter-model-tier` flag
-- ⚠️ Query validation strategy (needs UI work)
-- ✅ Query persistence with `smarter-query-persistence` flag
-- ✅ AI analyst assistant with `smarter-ai-analyst-access` flag
+-  Model tier gating with `smarter-model-tier` flag
+-  Query validation strategy (needs UI work)
+-  Query persistence with `smarter-query-persistence` flag
+-  AI analyst assistant with `smarter-ai-analyst-access` flag
 
 **⏳ Stage 4: Experiments & Analytics (PENDING)**
 
@@ -1881,7 +1881,7 @@ The system identifies statistically significant changes:
     )
     : (
       <div className="ai-analyst-gate">
-        <h3>🤖 AI Data Analyst</h3>
+        <h3> AI Data Analyst</h3>
         <p>Get automated insights and recommendations</p>
         <button onClick={() => setShowUpgrade(true)}>
           Unlock AI Analyst
@@ -2013,16 +2013,16 @@ Enable verbose logging in semantic-config.ts:
 const DEBUG_MODE = true;
 
 // Logs will show:
-// ✅ User prompt
-// 📋 Semantic metadata sent to LLM
-// 🤖 Raw model response
-// 📊 Parsed query specification
-// ✔️ Validation results
-// 🔧 Correction prompts (if validation fails)
-// 💾 Generated SQL
-// ⚡ Execution time
-// 📈 Result row count
-// 🎨 Chart configuration
+//  User prompt
+//  Semantic metadata sent to LLM
+//  Raw model response
+//  Parsed query specification
+//  Validation results
+//  Correction prompts (if validation fails)
+//  Generated SQL
+//  Execution time
+//  Result row count
+//  Chart configuration
 ```
 
 **Common Issues and Solutions**:
@@ -2415,8 +2415,8 @@ const DEBUG = true;
 Check validation logs for specific errors:
 
 ```
-❌ [VALIDATION ERROR] Unknown dimension "plan_type"
-💡 Did you mean: "plan_tier" (alias: "Current Plan Tier")
+ [VALIDATION ERROR] Unknown dimension "plan_type"
+ Did you mean: "plan_tier" (alias: "Current Plan Tier")
 ```
 
 **Common Issues**:

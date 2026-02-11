@@ -25,11 +25,13 @@ final as (
         -- keys
         {{ dbt_utils.generate_surrogate_key(['h.invocation_id', 'h.node_id']) }} as dbt_freshness_result_skey,
         {{ dbt_utils.generate_surrogate_key(['h.node_id']) }} as dbt_source_key,
-        -- BQ: Format date as integer key YYYYMMDD
-        cast(strftime(h.run_started_at, '%Y%m%d') as bigint) as freshness_execution_started_date_key,
+        -- DuckDB: Native DATE type
+        cast(h.run_started_at as DATE) as freshness_date,
 
         -- identity
         h.node_id as source_node_id,
+        -- Placeholder for database_name until confirmed in source
+        'swamp_data' as database_name, 
         split_part(h.node_id, '.', 3) as source_name,
         split_part(h.node_id, '.', 4) as source_table,
         h.node_name as source_node_name,

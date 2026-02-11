@@ -30,7 +30,7 @@ export function trackView(
     ...additionalProps
   });
   
-  console.log(`👁️ [VIEW] ${type}:${context}:${component}`, additionalProps);
+  console.log(` [VIEW] ${type}:${context}:${component}`, additionalProps);
 }
 
 /**
@@ -61,7 +61,7 @@ export function trackInteraction(
     ...additionalProps
   });
   
-  console.log(`🖱️ [INTERACTION] ${action}:${target}`, additionalProps);
+  console.log(` [INTERACTION] ${action}:${target}`, additionalProps);
 }
 
 /**
@@ -92,7 +92,7 @@ export function trackPerformance(
     ...additionalProps
   });
   
-  console.log(`⚡ [PERFORMANCE] ${type}:${context}`, additionalProps);
+  console.log(` [PERFORMANCE] ${type}:${context}`, additionalProps);
 }
 
 /**
@@ -125,7 +125,7 @@ export function trackSession(
     ...additionalProps
   });
   
-  console.log(`🕒 [SESSION] ${type}`, additionalProps);
+  console.log(` [SESSION] ${type}`, additionalProps);
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -179,7 +179,7 @@ export async function trackServerOperation(
 ) {
   // Server-side tracking implementation
   // Will call LaunchDarkly server SDK
-  console.log(`⚙️ [OPERATION] ${service}:${type}:${action}`, additionalProps);
+  console.log(` [OPERATION] ${service}:${type}:${action}`, additionalProps);
 }
 
 /**
@@ -191,5 +191,5 @@ export async function trackServerError(
   service: string,
   additionalProps: Record<string, any> = {}
 ) {
-  console.error(`❌ [ERROR] ${service}:${type}`, additionalProps);
+  console.error(` [ERROR] ${service}:${type}`, additionalProps);
 }

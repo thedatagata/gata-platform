@@ -383,7 +383,7 @@ export class SemanticQueryValidator {
   private generateCorrectionPrompt(_sql: string, errors: ValidationResult['errors']): string {
     const uniqueErrorTypes = new Set(errors.map(e => e.type));
     
-    let prompt = `🚨 SQL ERRORS (${errors.length})\n\n`;
+    let prompt = ` SQL ERRORS (${errors.length})\n\n`;
     
     errors.forEach((err, idx) => {
       prompt += `${idx + 1}. ${err.message}\n`;
@@ -395,7 +395,7 @@ export class SemanticQueryValidator {
     const showMeasures = uniqueErrorTypes.has('wrong_aggregation') || uniqueErrorTypes.has('missing_aggregation');
     
     if (showDimensions || showMeasures) {
-      prompt += `📋 RELEVANT MAPPINGS:\n\n`;
+      prompt += ` RELEVANT MAPPINGS:\n\n`;
       
       // Show only the fields mentioned in errors
       const errorColumns = new Set(errors.map(e => e.column));
@@ -441,7 +441,7 @@ export class SemanticQueryValidator {
       }
     }
 
-    prompt += `\n⚠️ CRITICAL: Use source column names in SQL, return with AS for aliases!\n`;
+    prompt += `\n CRITICAL: Use source column names in SQL, return with AS for aliases!\n`;
     prompt += `Table: ${this.metadata.table}\n`;
 
     return prompt;

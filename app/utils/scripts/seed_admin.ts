@@ -10,7 +10,7 @@ export default async function seedAdmin() {
   const adminPassword = "a3f2b1c0-5d4e-4a1b-9c8d-7e6f5a4b3c2da3f2b1c0-5d4e-4a1b-9c8d-7e6f5a4b3c2d";
 
   if (!adminEmail) {
-    console.error("❌ ADMIN_EMAIL not set in environment");
+    console.error(" ADMIN_EMAIL not set in environment");
     return; // Don't exit, just return
   }
 
@@ -22,7 +22,7 @@ export default async function seedAdmin() {
   const hash = await bcrypt.hash(adminPassword, salt);
 
   if (existing) {
-    console.log("🔄 Updating existing admin user...");
+    console.log(" Updating existing admin user...");
     // We can't use updateUser for password yet as it doesn't support it in the Partial
     // So we'll use createUser to overwrite (it uses set which overwrites)
     // But createUser checks for existence first... wait.
@@ -46,7 +46,7 @@ export default async function seedAdmin() {
     };
     
     await kv.set(key, updatedUser);
-    console.log("✅ Admin user updated with current credentials!");
+    console.log(" Admin user updated with current credentials!");
     return;
   }
 
@@ -61,7 +61,7 @@ export default async function seedAdmin() {
     "7b"       // Give admin the powerful model
   );
 
-  console.log(`✅ Admin user created!`);
+  console.log(` Admin user created!`);
   console.log(`Username: ${adminEmail}`);
   console.log(`Password: (Your SESSION_SECRET)`);
 }

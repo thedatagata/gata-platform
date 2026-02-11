@@ -153,7 +153,7 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
             <div class="space-y-3">
               <div class="flex justify-between items-center">
                 <label class="block text-xs font-black text-gata-green uppercase tracking-widest">Glossary & Descriptions</label>
-                {webllmEngine && <button type="button" onClick={generateAiDescriptions} class="text-[10px] bg-gata-green/10 text-gata-green border border-gata-green/20 px-3 py-1 rounded-full font-bold hover:bg-gata-green/20">✨ AI AUTOFILL</button>}
+                {webllmEngine && <button type="button" onClick={generateAiDescriptions} class="text-[10px] bg-gata-green/10 text-gata-green border border-gata-green/20 px-3 py-1 rounded-full font-bold hover:bg-gata-green/20"> AI AUTOFILL</button>}
               </div>
               <textarea value={glossary} onChange={(e) => { const v = (e.target as HTMLTextAreaElement).value; setGlossary(v); applyGlossary(v); }} class="w-full bg-gata-darker border-2 border-gata-green/10 rounded-2xl p-4 font-mono text-sm text-gata-green/80 focus:border-gata-green outline-none min-h-[300px]" />
             </div>

@@ -54,7 +54,7 @@ export default function WebDataRocksPivot({
         mainScript.onload = resolve;
       });
 
-      console.log('✅ WebDataRocks assets loaded');
+      console.log(' WebDataRocks assets loaded');
       setAssetsLoaded(true);
     };
 
@@ -93,9 +93,9 @@ export default function WebDataRocksPivot({
     // Test JSON serialization
     try {
       JSON.stringify(sanitizedData.slice(0, 5));
-      console.log('WebDataRocksPivot: ✅ Data is serializable');
+      console.log('WebDataRocksPivot:  Data is serializable');
     } catch (e) {
-      console.error('WebDataRocksPivot: ❌ Serialization failed:', e);
+      console.error('WebDataRocksPivot:  Serialization failed:', e);
       return;
     }
     
@@ -114,7 +114,7 @@ export default function WebDataRocksPivot({
       ? buildSemanticMetadata(columns, semanticLayer)
       : buildUsersMetadata(columns);
     const dataWithMetadata = [metadataObject, ...sanitizedData];
-    console.log('WebDataRocksPivot: ✅ Prepended metadata object');
+    console.log('WebDataRocksPivot:  Prepended metadata object');
 
     // Generate or use provided slice
     const slice = initialSlice || generateSliceObject(columns);
@@ -144,14 +144,14 @@ export default function WebDataRocksPivot({
     // Set timeout to detect data overload (3 seconds)
     loadTimeoutRef.current = globalThis.setTimeout(() => {
       if (onLoadError) {
-        console.error('❌ Data load timeout - likely data too large');
+        console.error(' Data load timeout - likely data too large');
         onLoadError('Data load timeout - data may be too large for free tier');
       }
     }, 3000);
 
     // Simple reportcomplete handler
     pivotRef.current.on('reportcomplete', function() {
-      console.log('📊 Report complete - slice should already be applied');
+      console.log(' Report complete - slice should already be applied');
       
       // Clear timeout - report loaded successfully
       if (loadTimeoutRef.current) {
@@ -161,7 +161,7 @@ export default function WebDataRocksPivot({
 
       // Verify what slice is actually active
       const currentReport = pivotRef.current.getReport();
-      console.log('✅ Current slice configuration:', currentReport?.slice);
+      console.log(' Current slice configuration:', currentReport?.slice);
 
       // Debug: Show available fields to verify names match
       console.log('Available hierarchies:', pivotRef.current.getAllHierarchies());

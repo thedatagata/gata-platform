@@ -29,7 +29,7 @@ export function useLDFlag<K extends keyof FlagValues>(
 
     // Subscribe to changes
     const handleChange = (newValue: FlagValues[K]) => {
-      console.log(`🚩 [Hook] Flag changed: ${flagKey} =`, newValue);
+      console.log(` [Hook] Flag changed: ${flagKey} =`, newValue);
       setValue(newValue);
     };
 

@@ -103,7 +103,7 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
                 onClick={() => setSourceSelection('upload')}
                 class="bg-gata-dark border-4 border-gata-green/10 hover:border-gata-green hover:translate-y-[-8px] p-12 rounded-3xl transition-all group"
               >
-                <div class="text-5xl mb-6">📤</div>
+                <div class="text-5xl mb-6"></div>
                 <div class="text-2xl font-black text-gata-cream uppercase tracking-tight">Local Upload</div>
                 <p class="text-xs text-gata-cream/40 mt-4 font-medium italic">CSV, Parquet, JSON from your machine.</p>
               </button>
@@ -120,12 +120,12 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
             <h2 class="text-6xl font-black text-gata-cream italic tracking-tighter uppercase underline decoration-gata-green decoration-8 underline-offset-8">Select Dataset</h2>
             <div class="grid grid-cols-2 gap-8 px-4">
                <button type="button" onClick={() => { setActiveTable('session_facts'); setIsProfiling(true); }} class="bg-gata-dark border-4 border-gata-green/10 hover:border-gata-green hover:translate-y-[-8px] p-10 rounded-3xl transition-all group relative overflow-hidden">
-                  <span class="text-5xl block mb-6 group-hover:scale-110 transition-transform">🖱️</span>
+                  <span class="text-5xl block mb-6 group-hover:scale-110 transition-transform"></span>
                   <span class="text-2xl font-black text-gata-cream uppercase tracking-tight">Product Analytics</span>
                   <p class="text-xs text-gata-cream/40 mt-4 leading-relaxed font-medium">Real-time session events, conversion funnels, and user pathing datasets.</p>
                </button>
                <button type="button" onClick={() => { setActiveTable('users_dim'); setIsProfiling(true); }} class="bg-gata-dark border-4 border-gata-green/10 hover:border-gata-green hover:translate-y-[-8px] p-10 rounded-3xl transition-all group relative overflow-hidden">
-                  <span class="text-5xl block mb-6 group-hover:scale-110 transition-transform">👥</span>
+                  <span class="text-5xl block mb-6 group-hover:scale-110 transition-transform"></span>
                   <span class="text-2xl font-black text-gata-cream uppercase tracking-tight">Growth Data</span>
                   <p class="text-xs text-gata-cream/40 mt-4 leading-relaxed font-medium">User retention, engagement scoring, and demographic breakdown data.</p>
                </button>

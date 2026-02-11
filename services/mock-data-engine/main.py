@@ -60,7 +60,7 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
         # For metadata insertion:
         md_token = os.environ.get('MOTHERDUCK_TOKEN')
         if not md_token:
-            print("⚠️  MOTHERDUCK_TOKEN not found in env. Metadata insertion might fail.")
+            print("  MOTHERDUCK_TOKEN not found in env. Metadata insertion might fail.")
             
         platform_db_conn_str = f"md:my_db?motherduck_token={md_token}" if md_token else "md:my_db"
 
@@ -75,10 +75,10 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
         # Status Check
         if tenant_config.status not in ['pending', 'onboarding']:
             if specific_tenant and tenant_slug == specific_tenant:
-                print(f"ℹ️  Forcing run for active tenant: {tenant_slug}")
+                print(f"ℹ  Forcing run for active tenant: {tenant_slug}")
             else:
                 if specific_tenant:
-                     print(f"⚠️  Skipping {tenant_slug}: Status is '{tenant_config.status}' (expected 'pending' or 'onboarding').")
+                     print(f"  Skipping {tenant_slug}: Status is '{tenant_config.status}' (expected 'pending' or 'onboarding').")
                 continue
 
         print(f"Initializing Generator for {tenant_config.business_name} ({tenant_slug})...")
@@ -86,9 +86,10 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
         # 1. Run Orchestrator (Data Gen + dlt Load)
         # Pass credentials string for local duckdb support in dlt
         orchestrator = MockOrchestrator(tenant_config, effective_days, credentials=credentials_str)
+        dlt_load_id = "manual_run"
         try:
-            dlt_schema = orchestrator.run() # Physical load happens here
-            print(f"Data loaded via dlt for {tenant_slug}")
+            dlt_schema, dlt_load_id = orchestrator.run() # Physical load happens here
+            print(f"Data loaded via dlt for {tenant_slug} (Load ID: {dlt_load_id})")
         except Exception as e:
             print(f"Error during data generation/loading for {tenant_slug}: {e}")
             continue
@@ -108,7 +109,7 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
             print(f"    DEBUG: BSL Manifest models count: {len(bsl_manifest.get('models', []))}")
             
         except Exception as e:
-             print(f"❌ Error generating BSL manifest: {e}")
+             print(f" Error generating BSL manifest: {e}")
              import traceback
              traceback.print_exc()
              bsl_manifest = {}
@@ -159,19 +160,18 @@ def run_pipeline(config_path: str, target: str, days: int, specific_tenant: str 
     # 3. Refresh Warehouse Registry & Run Transformations (Once after all data gen)
     print("  - Running dbt Transformations via dlt runner...")
     try:
-        run_dbt_transformations(target, manifest)
+        run_dbt_transformations(target, manifest, dlt_load_id)
         print("    -> dbt transformations successful.")
     except Exception as e:
         print(f"    -> dbt transformations failed: {e}")
 
-def run_dbt_transformations(target: str, manifest: Any):
+def run_dbt_transformations(target: str, manifest: Any, dlt_load_id: str):
     """Orchestrates transformations using the native dlt-dbt runner pattern."""
     
     # Configure destination based on target
     if target == "local":
         db_path = os.path.abspath(os.path.join(current_dir, "../../warehouse/sandbox.duckdb"))
         destination = dlt.destinations.duckdb(db_path)
-        credentials = None
     else:
         # MotherDuck specific configuration
         token = os.environ.get('MOTHERDUCK_TOKEN', '')
@@ -194,10 +194,13 @@ def run_dbt_transformations(target: str, manifest: Any):
         venv=None
     )
     
-    print(f"    -> Triggering dbt build with logic injection...")
+    print(f"    -> Triggering dbt build with logic injection (Load ID: {dlt_load_id})...")
     # Inject the full manifest dictionary for hub hydration
     dbt.run(
-        additional_vars={'tenant_configs': manifest.dict()}
+        additional_vars={
+            'tenant_configs': manifest.dict(),
+            'dlt_load_id': dlt_load_id
+        }
     )
 
 if __name__ == "__main__":

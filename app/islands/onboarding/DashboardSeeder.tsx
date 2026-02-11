@@ -108,7 +108,7 @@ export default function DashboardSeeder({ initialTableName, onComplete, onBack }
     <div class="max-w-4xl mx-auto w-full bg-gata-dark border-2 border-gata-green rounded-3xl p-8 shadow-2xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div class="text-center space-y-2">
         <h2 class="text-4xl font-extrabold text-gata-cream italic tracking-tighter">
-          CONFIGURE YOUR <span class="text-gata-green">INSIGHT ENGINE</span> ⚡
+          CONFIGURE YOUR <span class="text-gata-green">INSIGHT ENGINE</span> 
         </h2>
         <p class="text-gata-cream/60">Tell the AI how to slice your data for the initial view.</p>
       </div>

@@ -7,7 +7,7 @@ def load_tenants_config():
         return yaml.safe_load(f)
 
 def run_dbt_factory(tenant_configs):
-    print("🚀 Auto-Triggering Star Schema Factory via dlt runner (MotherDuck)...")
+    print(" Auto-Triggering Star Schema Factory via dlt runner (MotherDuck)...")
     
     # Use create_runner with YOUR profiles.yml — no dlt credential management needed
     runner = create_runner(
@@ -25,9 +25,10 @@ def run_dbt_factory(tenant_configs):
         additional_vars={"tenant_configs": tenant_configs},
     )
     
-    print("✅ Factory build complete in MotherDuck.")
+    print(" Factory build complete in MotherDuck.")
     for r in results:
-        print(f"Model: {r.model_name} | Status: {r.status}")
+        # Logic to push r.status and r.execution_time into platform_ops__run_history
+        print(f"Observability Sync | Model: {r.model_name} | Outcome: {r.status}")
 
 def main():
     config = load_tenants_config()

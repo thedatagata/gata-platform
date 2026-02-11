@@ -25,7 +25,7 @@ export async function handler(
     if (session) {
       const user = await getUser(session.username);
       if (user?.securityRestricted) {
-        console.warn(`🛑 [Security] Blocking session for restricted user: ${user.username}`);
+        console.warn(` [Security] Blocking session for restricted user: ${user.username}`);
         await deleteSession(sessionId);
         return new Response("Account Restricted", { status: 403 });
       }

@@ -56,6 +56,6 @@ jobs:
 
       - name: Notify team
         run: |
-          echo "🚨 ROLLBACK: Flag ${{ inputs.flag_key }} disabled in ${{ inputs.environment }}"
+          echo " ROLLBACK: Flag ${{ inputs.flag_key }} disabled in ${{ inputs.environment }}"
           echo "Reason: ${{ inputs.reason }}"
           echo "Time: $(date -u)"

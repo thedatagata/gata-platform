@@ -25,11 +25,11 @@ jobs:
       - name: Verify LaunchDarkly Flags
         # This simple check ensures we don't deploy code referencing missing flags
         run: |
-          echo "🔍 Scanning for flag usage..."
+          echo " Scanning for flag usage..."
           # Search for FLAGS. usage in the codebase
           grep -r "FLAGS\." . --include="*.tsx" --include="*.ts" || true
           
-          echo "✅ Flag references found. (In a real enterprise setup, we would validate these against the LD API)"
+          echo " Flag references found. (In a real enterprise setup, we would validate these against the LD API)"
 
   deploy:
     needs: test

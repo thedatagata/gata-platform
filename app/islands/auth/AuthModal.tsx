@@ -48,7 +48,7 @@ export default function AuthModal({ selectedPlan, onSuccess, onCancel }: AuthMod
         throw new Error(data.error || `${mode} failed`);
       }
 
-      console.log(`✅ ${mode} successful:`, data.user);
+      console.log(` ${mode} successful:`, data.user);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");

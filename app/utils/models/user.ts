@@ -74,7 +74,7 @@ export async function createUser(
     throw new Error("Username, email, or Google account already exists");
   }
   
-  console.log(`👤 Created user: ${username}`);
+  console.log(` Created user: ${username}`);
   return user;
 }
 
@@ -123,7 +123,7 @@ export async function updateUser(username: string, updates: Partial<User>): Prom
     committed = result.ok;
   }
   
-  console.log(`💾 Updated user: ${username}`, updates);
+  console.log(` Updated user: ${username}`, updates);
 }
 
 export async function listAllUsers(): Promise<User[]> {
@@ -148,7 +148,7 @@ export async function deleteUser(username: string): Promise<void> {
   if (user.googleId) atomic.delete(["users_by_google", user.googleId]);
   
   await atomic.commit();
-  console.log(`🗑️ Deleted user: ${username}`);
+  console.log(` Deleted user: ${username}`);
 }
 
 

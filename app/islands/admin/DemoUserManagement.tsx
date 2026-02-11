@@ -41,15 +41,15 @@ export default function DemoUserManagement() {
       });
       
       if (res.ok) {
-        setMsg("✅ User added");
+        setMsg(" User added");
         setEmail("");
         setPassword("");
         fetchUsers();
       } else {
-        setMsg("❌ Failed to add user");
+        setMsg(" Failed to add user");
       }
     } catch (e) {
-      setMsg("❌ Error adding user");
+      setMsg(" Error adding user");
     }
   };
 

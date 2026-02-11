@@ -38,7 +38,7 @@ export default function AdminLogin() {
       <div class="max-w-md w-full bg-[#172217] border border-red-900/30 rounded-lg shadow-2xl p-8">
         <div class="text-center mb-8">
           <div class="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-900/50">
-            <span class="text-2xl">🛡️</span>
+            <span class="text-2xl"></span>
           </div>
           <h2 class="text-2xl font-bold text-red-500">Admin Console</h2>
           <p class="text-gray-500 text-sm mt-2">Restricted Access Only</p>

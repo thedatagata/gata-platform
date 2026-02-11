@@ -14,7 +14,7 @@ export default function GataFooter() {
                 <img src="/gata_app_utils/nerdy_alligator_headshot.png" alt="DATA_GATA" class="h-8 w-8 rounded-lg" />
               </div>
               <h3 class="text-3xl font-black italic tracking-tighter uppercase">
-                DATA_<span class="text-gata-green">GATA</span> 🐊
+                DATA_<span class="text-gata-green">GATA</span> 
               </h3>
             </div>
             <p class="text-xl text-gata-cream/40 max-w-sm leading-relaxed font-medium">

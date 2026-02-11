@@ -109,7 +109,7 @@ export default function AdminUsersPage({ data }: PageProps<AdminData>) {
                 id="refresh-button"
                 class="px-4 py-2 bg-[#90C137]/20 border border-[#90C137]/30 text-[#90C137] rounded-lg hover:bg-[#90C137]/30 transition-colors text-sm"
               >
-                🔄 Refresh
+                 Refresh
               </button>
             </div>
             <div id="users-list" class="space-y-2">
@@ -122,7 +122,7 @@ export default function AdminUsersPage({ data }: PageProps<AdminData>) {
 
           {/* Instructions Section */}
           <div class="bg-[#90C137]/5 border border-[#90C137]/20 rounded-lg p-6 mt-8">
-            <h2 class="text-xl font-bold text-[#F8F6F0] mb-4">📋 Instructions</h2>
+            <h2 class="text-xl font-bold text-[#F8F6F0] mb-4"> Instructions</h2>
             <ol class="space-y-2 text-[#F8F6F0]/80 text-sm">
               <li>1. <strong>Regular Users:</strong> Create users here. They can log in via "Member Login".</li>
               <li>2. <strong>Demo Access:</strong> Add emails/passwords below. Users log in via "Demo Access" with these credentials.</li>
@@ -162,16 +162,16 @@ export default function AdminUsersPage({ data }: PageProps<AdminData>) {
             
             if (res.ok) {
               messageDiv.className = 'mt-4 p-3 rounded bg-green-900/50 border border-green-500/50 text-green-200';
-              messageDiv.textContent = '✅ ' + data.message;
+              messageDiv.textContent = ' ' + data.message;
               form.reset();
               loadUsers(); // Refresh the list
             } else {
               messageDiv.className = 'mt-4 p-3 rounded bg-red-900/50 border border-red-500/50 text-red-200';
-              messageDiv.textContent = '❌ ' + data.error;
+              messageDiv.textContent = ' ' + data.error;
             }
           } catch (err) {
             messageDiv.className = 'mt-4 p-3 rounded bg-red-900/50 border border-red-500/50 text-red-200';
-            messageDiv.textContent = '❌ Failed to create user';
+            messageDiv.textContent = ' Failed to create user';
           }
         });
 
@@ -240,10 +240,10 @@ export default function AdminUsersPage({ data }: PageProps<AdminData>) {
             if (res.ok) {
               loadUsers();
             } else {
-              alert('❌ ' + data.error);
+              alert(' ' + data.error);
             }
           } catch (err) {
-            alert('❌ Failed to delete user');
+            alert(' Failed to delete user');
           }
         }
       `}} />

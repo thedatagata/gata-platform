@@ -56,7 +56,7 @@ export function generateChartFromAnalysis(
     sql: queryResponse.sql
   });
 
-  console.log("📊 [ChartGenerator] Analysis:", analysis);
+  console.log(" [ChartGenerator] Analysis:", analysis);
 
   const primaryChart = buildChartConfig(
     analysis.recommendedCharts[0],

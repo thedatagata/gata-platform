@@ -11,7 +11,7 @@ export default function ExperienceGateway({ onSelect }: ExperienceGatewayProps) 
         <div class="text-center mb-16">
           <h4 class="text-[10px] font-black text-gata-green uppercase tracking-[0.4em] mb-4">Discovery Engine Phase 01: ORIGIN</h4>
           <h1 class="text-6xl font-black text-gata-cream italic tracking-tighter uppercase mb-4 leading-none">
-             Analyze <span class="text-gata-green">Anything.</span> 🐊
+             Analyze <span class="text-gata-green">Anything.</span> 
           </h1>
           <p class="text-xs text-gata-cream/40 font-medium uppercase tracking-[0.2em] max-w-lg mx-auto leading-relaxed">
             Universal semantic layer for local datasets. Choose your initialization vector.
@@ -27,7 +27,7 @@ export default function ExperienceGateway({ onSelect }: ExperienceGatewayProps) 
           >
             <div class="relative z-10 flex flex-col h-full">
               <div class="w-16 h-16 bg-gata-green/10 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
-                <span class="text-3xl grayscale group-hover:grayscale-0 transition-all">🏗️</span>
+                <span class="text-3xl grayscale group-hover:grayscale-0 transition-all"></span>
               </div>
               <h3 class="text-3xl font-black text-gata-cream italic uppercase tracking-tighter mb-4 pr-12">Explore Sample Dataset</h3>
               <p class="text-sm text-gata-cream/60 mb-8 flex-grow leading-relaxed font-medium">
@@ -49,7 +49,7 @@ export default function ExperienceGateway({ onSelect }: ExperienceGatewayProps) 
           >
             <div class="relative z-10 flex flex-col h-full">
               <div class="w-16 h-16 bg-gata-green/10 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
-                <span class="text-3xl grayscale group-hover:grayscale-0 transition-all">📁</span>
+                <span class="text-3xl grayscale group-hover:grayscale-0 transition-all"></span>
               </div>
               <h3 class="text-3xl font-black text-gata-cream italic uppercase tracking-tighter mb-4 pr-12">Analyze Your Own Data</h3>
               <p class="text-sm text-gata-cream/60 mb-8 flex-grow leading-relaxed font-medium">

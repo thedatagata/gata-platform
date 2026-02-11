@@ -43,7 +43,7 @@ export default function Home() {
               href="/app/dashboard"
               class="block w-full text-center py-4 bg-gata-green text-gata-dark font-black uppercase tracking-[0.2em] text-xs rounded-full hover:bg-[#a0d147] transition-all transform hover:-translate-y-1 shadow-lg shadow-gata-green/20"
             >
-              Launch Dashboard 🚀
+              Launch Dashboard 
             </a>
           </div>
         </div>

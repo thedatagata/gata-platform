@@ -25,7 +25,7 @@ export default function FileUploader({ db, onUploadComplete }: FileUploaderProps
       const ldClient = getLDClient();
       const useLocalBuffer = ldClient?.variation(FLAGS.DUCKDB_LOCAL_FILE_UPLOAD, false) ?? false;
       
-      console.log(`🚀 [FileUploader] Starting upload. Local Buffer Flag: ${useLocalBuffer}`);
+      console.log(` [FileUploader] Starting upload. Local Buffer Flag: ${useLocalBuffer}`);
       const tableName = await processFileUpload(db, file, { useLocalBuffer });
 
       
@@ -63,7 +63,7 @@ export default function FileUploader({ db, onUploadComplete }: FileUploaderProps
           class="cursor-pointer flex flex-col items-center justify-center gap-4 py-4"
         >
           <div class="w-16 h-16 bg-gata-green/10 rounded-full flex items-center justify-center group-hover:bg-gata-green/20 transition-all">
-            <span class="text-3xl">📂</span>
+            <span class="text-3xl"></span>
           </div>
           <div class="text-center">
             <span class="block text-xl font-bold text-gata-cream mb-1">
@@ -82,7 +82,7 @@ export default function FileUploader({ db, onUploadComplete }: FileUploaderProps
 
       <div class="bg-gata-green/5 rounded-2xl p-6 border border-gata-green/10">
         <h3 class="text-xs font-bold text-gata-green uppercase tracking-widest mb-4 flex items-center gap-2">
-          <span class="text-lg">💡</span> Optimal Field Preparation Guide
+          <span class="text-lg"></span> Optimal Field Preparation Guide
         </h3>
         <p class="text-sm text-gata-cream/70 mb-6 leading-relaxed">
           To get the most out of the Smarter AI Analyst, ensure your dataset includes these key attributes during the profiling step:

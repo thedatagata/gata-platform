@@ -47,7 +47,7 @@ export class TableConfigManager {
     }
 
     localStorage.setItem(CONFIG_KEY, JSON.stringify(configs));
-    console.log(`✅ Configured table: ${fullName} (${mode})`);
+    console.log(` Configured table: ${fullName} (${mode})`);
   }
 
   /**
@@ -57,7 +57,7 @@ export class TableConfigManager {
     const configs = this.getConfiguredTables();
     const filtered = configs.filter((c) => c.fullName !== fullName);
     localStorage.setItem(CONFIG_KEY, JSON.stringify(filtered));
-    console.log(`❌ Removed configuration: ${fullName}`);
+    console.log(` Removed configuration: ${fullName}`);
   }
 
   /**
@@ -93,6 +93,6 @@ export class TableConfigManager {
    */
   static clearAll(): void {
     localStorage.removeItem(CONFIG_KEY);
-    console.log("🗑️ Cleared all table configurations");
+    console.log(" Cleared all table configurations");
   }
 }

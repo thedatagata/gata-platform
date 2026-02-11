@@ -13,7 +13,7 @@ export default function Nav() {
               />
             </div>
             <span class="text-2xl font-black text-gata-cream italic tracking-tighter uppercase">
-              DATA_<span class="text-gata-green">GATA</span> 🐊
+              DATA_<span class="text-gata-green">GATA</span> 
             </span>
           </a>
 

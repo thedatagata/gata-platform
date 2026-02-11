@@ -175,12 +175,12 @@ export function generateSliceObject(queryColumns: string[]): SliceObject {
   if (hasHierarchyFields) {
     slice.drills = { drillAll: true };
     slice.expands = { expandAll: true };
-    console.log('✅ Added drills and expands (hierarchy fields detected)');
+    console.log(' Added drills and expands (hierarchy fields detected)');
   }
 
   // CRITICAL FIX: Don't delete empty arrays - WebDataRocks needs them to initialize properly
   // If we delete rows/columns, WebDataRocks won't apply the report config on initial load
-  console.log('📊 Final slice structure:', {
+  console.log(' Final slice structure:', {
     rows: slice.rows?.length || 0,
     columns: slice.columns?.length || 0,
     measures: slice.measures?.length || 0

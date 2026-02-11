@@ -7,7 +7,7 @@ a unified multi-tenant SaaS data operating system. It utilizes a modern **Shell
 
 ---
 
-## 🏗 Core Architecture
+##  Core Architecture
 
 Our architecture utilizes a high-integrity "Master Hub" pattern. This separates
 **Standardized Platform Data** (the "what") from **Volatile Client Logic** (the
@@ -47,7 +47,7 @@ This is where the "Shell & Engine" architecture comes alive.
 
 ---
 
-## 🧩 Connector Catalog Registry
+##  Connector Catalog Registry
 
 The **Connector Catalog Registry** is the source of truth that maps granular
 source tables to their standardized Master Models. It bridges the gap between:
@@ -90,7 +90,7 @@ Run this script whenever you add a new connector or update a schema version.
 
 ---
 
-## 🔧 Key Macros & Patterns
+##  Key Macros & Patterns
 
 ### `build_granular_master_hub`
 
@@ -132,7 +132,7 @@ the appropriate Engines to build the final report.
 
 ---
 
-## 🔄 Unification & Roadmap
+##  Unification & Roadmap
 
 This warehouse is part of a larger **Monorepo Architecture** that bridges three
 core components into a cohesive SaaS product:

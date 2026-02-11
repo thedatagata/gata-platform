@@ -24,10 +24,10 @@ export async function processFileUpload(
     
     // Guard the rollout of the buffer-based approach
     const useLocalBuffer = options.useLocalBuffer ?? false;
-    console.log(`🔧 [FileService] Registration check: options.useLocalBuffer=${options.useLocalBuffer}, final=${useLocalBuffer}`);
+    console.log(` [FileService] Registration check: options.useLocalBuffer=${options.useLocalBuffer}, final=${useLocalBuffer}`);
 
     if (useLocalBuffer) {
-        console.log("🔧 [FileService] Using local buffer approach (guarded rollout)");
+        console.log(" [FileService] Using local buffer approach (guarded rollout)");
         // Convert file to Uint8Array for registerFileBuffer (more compatible than registerFileHandle)
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
@@ -43,11 +43,11 @@ export async function processFileUpload(
                 await (db as any).registerFileBuffer(fileName, uint8Array);
             }
         } else {
-            console.warn("⚠️ [FileService] registerFileBuffer not supported, falling back to registerFileHandle");
+            console.warn(" [FileService] registerFileBuffer not supported, falling back to registerFileHandle");
             await registerViaHandle(duckdb, db, fileName, file);
         }
     } else {
-        console.log("🔧 [FileService] Falling back to standard file handle approach (Flag is OFF)");
+        console.log(" [FileService] Falling back to standard file handle approach (Flag is OFF)");
         await registerViaHandle(duckdb, db, fileName, file);
     }
 
@@ -63,7 +63,7 @@ export async function processFileUpload(
 
     await dbObj[queryMethod](`CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM '${fileName}'`);
 
-    console.log(`✅ Successfully loaded ${fileName} into table ${tableName}`);
+    console.log(` Successfully loaded ${fileName} into table ${tableName}`);
     return tableName;
   } catch (err) {
     console.error("File upload utility failed:", err);

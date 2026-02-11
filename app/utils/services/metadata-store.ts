@@ -94,7 +94,7 @@ class MetadataStore {
     const isAtLimit = await this.isAtCacheLimit();
     
     if (isAtLimit) {
-      console.log('⚠️ Cache limit reached, auto-deleting oldest table');
+      console.log(' Cache limit reached, auto-deleting oldest table');
       return await this.deleteOldestTable();
     }
     

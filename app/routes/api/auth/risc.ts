@@ -41,11 +41,11 @@ export const handler: Handlers = {
 
         if (!googleId) continue;
 
-        console.log(`🚨 [RISC] Received event ${uri} for Google ID: ${googleId}`);
+        console.log(` [RISC] Received event ${uri} for Google ID: ${googleId}`);
 
         const user = await getUserByGoogleId(googleId);
         if (!user) {
-          console.warn(`⚠️ [RISC] User with Google ID ${googleId} not found in our system.`);
+          console.warn(` [RISC] User with Google ID ${googleId} not found in our system.`);
           continue;
         }
 
@@ -67,7 +67,7 @@ export const handler: Handlers = {
 
       return new Response("OK", { status: 202 });
     } catch (error) {
-      console.error("❌ [RISC] Error processing security event:", error);
+      console.error(" [RISC] Error processing security event:", error);
       return new Response("Error", { status: 500 });
     }
   }

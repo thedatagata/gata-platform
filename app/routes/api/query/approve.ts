@@ -35,7 +35,7 @@ export const handler: Handlers = {
       await kv.set(["query_cache", id], cached);
       await kv.set(["approved_queries", id], cached);
       
-      console.log(`✅ Approved query: ${id}`);
+      console.log(` Approved query: ${id}`);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { "Content-Type": "application/json" },

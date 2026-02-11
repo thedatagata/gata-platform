@@ -9,7 +9,7 @@ export async function initializeLDServer() {
   
   const sdkKey = Deno.env.get("LAUNCHDARKLY_SDK_KEY");
   if (!sdkKey) {
-    console.warn("⚠️ LaunchDarkly SDK key not configured in environment variables");
+    console.warn(" LaunchDarkly SDK key not configured in environment variables");
     return null;
   }
 
@@ -26,10 +26,10 @@ export async function initializeLDServer() {
   
   try {
     await ldServerClient.waitForInitialization();
-    console.log("✅ LaunchDarkly server SDK initialized");
+    console.log(" LaunchDarkly server SDK initialized");
     return ldServerClient;
   } catch (err) {
-    console.error("❌ Failed to initialize LaunchDarkly server SDK:", err);
+    console.error(" Failed to initialize LaunchDarkly server SDK:", err);
     return null;
   }
 }

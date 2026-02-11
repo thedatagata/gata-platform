@@ -2,6 +2,9 @@ name: "gata_transformation"
 version: "1.0.0"
 config-version: 2
 
+vars:
+  dlt_load_id: "manual_run"
+
 require-dbt-version: ">=1.8.0"
 
 profile: "swamp-duck"

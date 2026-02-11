@@ -81,5 +81,5 @@ export async function updateUserContext(
     committed = result.ok;
   }
   
-  console.log(`💾 DB: Updated context for ${sessionId}:`, updates);
+  console.log(` DB: Updated context for ${sessionId}:`, updates);
 }

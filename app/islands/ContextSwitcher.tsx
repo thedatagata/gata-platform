@@ -83,7 +83,7 @@ export default function ContextSwitcher({ }: ContextSwitcherProps) {
         onClick={() => setIsOpen(!isOpen)}
         class="bg-[#90C137] text-[#172217] px-4 py-2 rounded-full shadow-lg font-bold hover:bg-[#a0d147] transition-colors"
       >
-        {isOpen ? "Close Debug" : "🔧 LD Context"}
+        {isOpen ? "Close Debug" : " LD Context"}
       </button>
 
       {isOpen && (
@@ -118,7 +118,7 @@ export default function ContextSwitcher({ }: ContextSwitcherProps) {
                 }}
                 class="w-full text-left px-3 py-2 rounded hover:bg-red-900/50 text-red-300"
               >
-                🔄 Reset / New User
+                 Reset / New User
               </button>
             </div>
           </div>

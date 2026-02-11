@@ -64,7 +64,7 @@ export default function DashboardPage({ data }: PageProps<DashboardData>) {
         <div class="max-w-md w-full bg-[#172217] border border-[#90C137]/30 rounded-2xl p-8 shadow-2xl">
           <div class="text-center">
             <div class="w-16 h-16 bg-[#90C137]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span class="text-3xl">🔒</span>
+              <span class="text-3xl"></span>
             </div>
             <h1 class="text-2xl font-bold text-[#F8F6F0] mb-2">Private Demo Access</h1>
             <p class="text-[#F8F6F0]/70 mb-6">

@@ -6,7 +6,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ## Completed Phases
 
-### Phase 1: Foundation — Connector Library & Data Contracts ✅
+### Phase 1: Foundation — Connector Library & Data Contracts 
 
 **Goal:** Establish the structural fingerprinting system and Pydantic data contracts for all supported connectors.
 
@@ -25,7 +25,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 2: Tenant Onboarding & Source Layer ✅
+### Phase 2: Tenant Onboarding & Source Layer 
 
 **Goal:** Automate the creation of source shims and staging pushers for new tenants.
 
@@ -42,7 +42,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 3: Master Model Layer & Data Vault ✅
+### Phase 3: Master Model Layer & Data Vault 
 
 **Goal:** Build the multi-tenant sinks, hub key registry, and satellite tracking.
 
@@ -63,7 +63,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 4: Push Circuit Closure & Intermediate Layer ✅
+### Phase 4: Push Circuit Closure & Intermediate Layer 
 
 **Goal:** Wire staging pushers to master models via post-hooks and build tenant-isolated intermediate views.
 
@@ -80,7 +80,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 5: Engines, Factories & Analytics Star Schema ✅
+### Phase 5: Engines, Factories & Analytics Star Schema 
 
 **Goal:** Build the shell-and-engine architecture that normalizes diverse sources into canonical star schemas.
 
@@ -114,7 +114,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 6: Observability & Metadata Capture ✅
+### Phase 6: Observability & Metadata Capture 
 
 **Goal:** Capture dbt execution artifacts for downstream automation and semantic layer population.
 
@@ -131,7 +131,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 7: dlt → dbt Integration ✅
+### Phase 7: dlt → dbt Integration 
 
 **Goal:** Wire dlt ingestion to dbt transformation in a single pipeline.
 
@@ -142,7 +142,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ---
 
-### Phase 8: In-Browser Semantic Layer (Tier 1) ✅
+### Phase 8: In-Browser Semantic Layer (Tier 1) 
 
 **Goal:** Build a self-contained text-to-SQL engine that runs entirely client-side.
 
@@ -168,7 +168,7 @@ This document tracks implementation phases, current status, and upcoming work. I
 
 ## In Progress
 
-### Phase 9: Backend Semantic Layer (Tier 2) — BSL Integration 🔄
+### Phase 9: Backend Semantic Layer (Tier 2) — BSL Integration 
 
 **Goal:** Auto-generate Boring Semantic Layer definitions from dbt metadata and serve via FastAPI with MCP support.
 

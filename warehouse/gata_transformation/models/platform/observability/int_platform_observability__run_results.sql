@@ -2,6 +2,7 @@
 
 SELECT
     invocation_id,
+    dlt_load_id,
     node_id,
     node_name,
     run_result_status,

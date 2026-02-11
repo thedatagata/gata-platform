@@ -157,10 +157,14 @@ class MockOrchestrator:
                 load_package.append(create_table_etl('mixpanel', table_name, rows))
 
         # ── Atomic dlt load ──
+        dlt_load_id = "manual_run"
         if load_package:
-            pipeline.run(load_package)
+            info = pipeline.run(load_package)
+            if info.loads_ids:
+                dlt_load_id = info.loads_ids[0]
+                print(f"    -> dlt Load ID: {dlt_load_id}")
 
-        return pipeline.default_schema.to_dict()
+        return pipeline.default_schema.to_dict(), dlt_load_id
 
 
 # ═══════════════════════════════════════════════════════════════

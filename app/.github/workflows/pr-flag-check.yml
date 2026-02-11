@@ -36,7 +36,7 @@ jobs:
       - name: Evaluate flags for PR context
         if: steps.find-flags.outputs.flags != ''
         run: |
-          echo "🚩 Feature flags found in PR:"
+          echo " Feature flags found in PR:"
           echo "${{ steps.find-flags.outputs.flags }}"
 
       - name: Comment on PR
@@ -50,6 +50,6 @@ jobs:
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: `## 🚩 LaunchDarkly Feature Flags Detected\n\nThis PR modifies code that references feature flags:\n\`\`\`\n${flags}\n\`\`\`\n\n**Please verify:**\n- [ ] Flags exist in LaunchDarkly\n- [ ] Targeting rules are configured\n- [ ] Default variations are safe\n- [ ] Code handles all variations properly`
+                body: `##  LaunchDarkly Feature Flags Detected\n\nThis PR modifies code that references feature flags:\n\`\`\`\n${flags}\n\`\`\`\n\n**Please verify:**\n- [ ] Flags exist in LaunchDarkly\n- [ ] Targeting rules are configured\n- [ ] Default variations are safe\n- [ ] Code handles all variations properly`
               });
             }

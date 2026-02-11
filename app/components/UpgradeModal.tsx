@@ -139,25 +139,25 @@ export default function UpgradeModal({ feature, trigger, upgradeType = "plan", s
       title: "Unlock AI-Powered Queries",
       description: "Generate SQL instantly with natural language prompts",
       features: ["Natural language to SQL", "Query suggestions", "Error corrections"],
-      emoji: "🤖"
+      emoji: ""
     },
     "7b_model": {
       title: "Upgrade to 7B AI Model",
       description: "More accurate queries with our premium AI model",
       features: ["Higher accuracy", "Better context understanding", "Faster query generation"],
-      emoji: "🚀"
+      emoji: ""
     },
     query_persistence: {
       title: "Save Your Queries Forever",
       description: "Keep your queries across sessions with persistent storage",
       features: ["Unlimited query storage", "Access from any device", "Query history tracking"],
-      emoji: "💾"
+      emoji: ""
     },
     data_limit: {
       title: "Need More Data?",
       description: "Upgrade to Smarter for unlimited data processing",
       features: ["Unlimited data size", "WebLLM semantic layer", "Query persistence"],
-      emoji: "📊"
+      emoji: ""
     },
     ai_analyst_access: {
       title: "Add Your Personal Data Analyst",
@@ -168,7 +168,7 @@ export default function UpgradeModal({ feature, trigger, upgradeType = "plan", s
         "Actionable recommendations",
         "Natural language explanations"
       ],
-      emoji: "🧠"
+      emoji: ""
     }
   };
   
@@ -202,7 +202,7 @@ export default function UpgradeModal({ feature, trigger, upgradeType = "plan", s
               <ul className="space-y-3">
                 {currentContent.features.map((f, i) => (
                   <li key={i} className="flex items-start text-gata-cream">
-                    <span className="text-gata-green mr-2 mt-1">✓</span>
+                    <span className="text-gata-green mr-2 mt-1"></span>
                     <span>{f}</span>
                   </li>
                 ))}
@@ -261,7 +261,7 @@ export default function UpgradeModal({ feature, trigger, upgradeType = "plan", s
 
         {view === 'success' && (
           <div className="text-center py-8">
-            <div className="text-6xl mb-4">🎉</div>
+            <div className="text-6xl mb-4"></div>
             <h2 className="text-2xl font-bold text-gata-green mb-2">
               {upgradeType === 'plan' ? "Upgrade Complete!" : "Feature Unlocked!"}
             </h2>

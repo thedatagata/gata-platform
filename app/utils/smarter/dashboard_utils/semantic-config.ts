@@ -50,7 +50,7 @@ export function registerCustomMetadata(metadata: SemanticLayer | SemanticMetadat
     measures: metadata.measures
   };
   customMetadataCache[metadata.table] = mapped;
-  console.log(`✅ Registered custom semantic metadata for table: ${metadata.table}`);
+  console.log(` Registered custom semantic metadata for table: ${metadata.table}`);
 }
 
 /**
@@ -388,11 +388,11 @@ export function generateSQLPrompt(table?: string): string {
 
   return `You are a specialized SQL Generator for DuckDB. Your task is to translate natural language into a VALID DuckDB SQL query for the "${metadata.table}" table.
  
- ### 📜 TABLE CONTEXT
+ ###  TABLE CONTEXT
  Table Name: "${metadata.table}"
  Description: ${metadata.description}
  
- ### 📋 STRICT RULES
+ ###  STRICT RULES
  1. ONLY use columns and aliases listed in the MAPPING sections below.
  2. DO NOT hallucinate columns like "opportunity_owner", "total_amount", or "lead_source" unless they are explicitly in the mapping.
  3. All strings must use single quotes: 'direct'.
@@ -404,13 +404,13 @@ export function generateSQLPrompt(table?: string): string {
  9. ALWAYS group by ALL non-aggregated columns if any aggregation is used.
  10. Refer to the table directly as "${metadata.table}".
  
- ### 🏷️ DIMENSION MAPPING (User Alias → Your SQL Column/Transformation)
+ ###  DIMENSION MAPPING (User Alias → Your SQL Column/Transformation)
  ${dimensionMappings.join('\n')}
  
- ### 📊 MEASURE MAPPING (User Alias → Your SQL Aggregation/Formula)
+ ###  MEASURE MAPPING (User Alias → Your SQL Aggregation/Formula)
  ${measureMappings.join('\n')}
  
- ### 📝 EXAMPLES
+ ###  EXAMPLES
  - "show me sessions by traffic source": SELECT traffic_source, COUNT(DISTINCT session_id) as session_count FROM ${metadata.table} GROUP BY 1
  - "revenue in the last 7 days": SELECT SUM(session_revenue) as total_revenue FROM ${metadata.table} WHERE session_date >= CURRENT_DATE - INTERVAL '7 days'
  

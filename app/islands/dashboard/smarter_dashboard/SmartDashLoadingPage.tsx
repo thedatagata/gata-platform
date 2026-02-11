@@ -98,9 +98,9 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, mode
           // Set search path early to ensure subsequent operations use the right context
           try {
             await localConn.query("SET search_path = 'memory.main,temp.main,main,my_db.amplitude,my_db.main'");
-            console.log("✅ [SmartDash] Search path configured for MotherDuck/Local hybrid");
+            console.log(" [SmartDash] Search path configured for MotherDuck/Local hybrid");
           } catch (e) {
-            console.warn("⚠️ [SmartDash] Failed to set search path early:", e);
+            console.warn(" [SmartDash] Failed to set search path early:", e);
           }
 
           await localConn.insertArrowTable(sessionsArrow, { name: 'session_facts' });
@@ -132,7 +132,7 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, mode
           }
         } else {
           // CUSTOM MODE: Just plain DuckDB
-          console.log("📂 [SmartDash] Initializing in CUSTOM mode (Local Files Only)");
+          console.log(" [SmartDash] Initializing in CUSTOM mode (Local Files Only)");
           
           setLoading({
             step: "duckdb",
@@ -152,7 +152,7 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, mode
           try {
             await localConn.query("SET search_path = 'memory.main,temp.main,main'");
           } catch (e) {
-            console.warn("⚠️ [SmartDash] Failed to set search path for custom mode:", e);
+            console.warn(" [SmartDash] Failed to set search path for custom mode:", e);
           }
           
           setLoading({
@@ -193,7 +193,7 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, mode
         
         // Get model tier from LaunchDarkly flag
         const modelTier = (ldClient as any)?.variation("smarter-model-tier", "3b") || "3b";
-        console.log(`📊 [SmartDash] Model tier: ${modelTier}`);
+        console.log(` [SmartDash] Model tier: ${modelTier}`);
         
         const llmHandler = new WebLLMSemanticHandler(semanticTables, modelTier, ldClient);
         await llmHandler.initialize((progress) => {
@@ -297,7 +297,7 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, mode
         </div>
 
         <div class="text-center mt-6 text-sm text-gata-cream/70">
-          <p>💡 All queries run locally in your browser</p>
+          <p> All queries run locally in your browser</p>
         </div>
       </div>
     </div>

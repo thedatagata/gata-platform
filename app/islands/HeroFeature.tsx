@@ -39,7 +39,7 @@ export default function HeroFeature({ _ldClientId }: HeroFeatureProps) {
                 class="w-full h-auto rounded-[1.5rem]"
               />
               <div class="absolute bottom-6 right-6 bg-gata-green text-gata-dark font-black px-4 py-1 rounded-full text-xs uppercase tracking-widest animate-bounce">
-                LEGENDARY 🐊
+                LEGENDARY 
               </div>
             </div>
           </div>

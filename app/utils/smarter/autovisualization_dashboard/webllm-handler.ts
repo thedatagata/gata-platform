@@ -166,7 +166,7 @@ export class WebLLMSemanticHandler {
     
     let historyContext = "";
     if (contextQueries && contextQueries.length > 0) {
-      historyContext = "\n### 📈 RELEVANT ANALYTICAL HISTORY (SUCCESSFUL PATTERNS):\n" + 
+      historyContext = "\n###  RELEVANT ANALYTICAL HISTORY (SUCCESSFUL PATTERNS):\n" + 
         contextQueries.slice(0, 5).map((q) => `- Goal: "${q.prompt}"\n  SQL: ${q.sql}`).join("\n");
     }
 
