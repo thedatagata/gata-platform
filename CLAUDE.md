@@ -67,6 +67,8 @@ The macro in `macros/onboarding/generate_staging_pusher.sql` creates staging vie
 | Platform governance | `warehouse/gata_transformation/models/platform/{hubs,satellites,ops}/` |
 | Mock data generators | `services/mock-data-engine/sources/{domain}/{platform}/` |
 | Onboarding scripts | `scripts/onboard_tenant.py`, `scripts/initialize_connector_library.py` |
+| BSL semantic configs | `services/platform-api/semantic_configs/{tenant_slug}.yaml` |
+| Platform API | `services/platform-api/main.py` |
 
 ## dbt Commands
 
@@ -82,12 +84,12 @@ Example: `uv run --env-file ../../.env dbt run --target dev`
 
 ## Current Database State (Feb 2026)
 
-**Full pipeline operational on both targets.** Last successful run: 125 PASS, 0 ERROR, 0 SKIP.
+**Full pipeline operational on both targets.** Last successful run: 133 PASS, 0 ERROR, 0 SKIP.
 
 ### Model Counts
-- **Total models:** 124 (121 materialized + 3 hooks)
+- **Total models:** 136 (132 materialized + 4 hooks)
 - **Intermediate:** 20 models (8 tyrell_corp, 6 wayne_enterprises, 6 stark_industries)
-- **Analytics:** 12 models (4 per tenant: fct_ad_performance, fct_orders, fct_sessions, dim_campaigns)
+- **Analytics:** 18 models (6 per tenant: fct_ad_performance, fct_orders, fct_sessions, fct_events, dim_campaigns, dim_users)
 - **Boring Semantic Layer:** 1 model cataloging all star schema tables with column metadata
 
 ### MotherDuck (dev target)
@@ -98,7 +100,7 @@ Example: `uv run --env-file ../../.env dbt run --target dev`
 
 ### Sandbox (local target)
 - Raw data in tenant-specific schemas within `warehouse/sandbox.duckdb`
-- Full parity with dev — same 125 models pass
+- Full parity with dev — same 133 models pass
 - `_sources.yml` files omit `database` key (local DuckDB resolves without it)
 - Data landed via `dlt.destinations.duckdb(credentials=sandbox_path)` in orchestrator
 
@@ -140,10 +142,21 @@ Models with computed columns (Google Ads `cost_micros / 1000000.0`, Mixpanel `pr
 | `fct_{slug}__ad_performance` | UNION ALL of ad engines (spend, impressions, clicks, conversions by ad_id/date) |
 | `fct_{slug}__orders` | Ecommerce orders (order_id, total_price, currency, customer info) |
 | `fct_{slug}__sessions` | Sessionized analytics events (30-min window, attribution, conversion flags) |
+| `fct_{slug}__events` | Raw analytics event stream with attribution and optional ecommerce data |
 | `dim_{slug}__campaigns` | Campaign dimension (campaign_id, name, status across ad platforms) |
+| `dim_{slug}__users` | Unified user dimension with identity resolution across analytics + ecommerce |
 
 ### Boring Semantic Layer (`platform_ops__boring_semantic_layer`)
 Auto-catalogs all `fct_*` and `dim_*` tables using `INFORMATION_SCHEMA`. Outputs one row per star schema table with: `tenant_slug`, `table_type` (fact/dimension), `subject`, `table_name`, `semantic_manifest` (JSON array of column metadata).
+
+### BSL Semantic Configs
+Per-tenant YAML config files at `services/platform-api/semantic_configs/{tenant_slug}.yaml` provide semantic context on top of the raw BSL metadata. Each config defines:
+- **dimensions**: Columns for grouping/filtering with types (string, date, boolean, timestamp_epoch)
+- **measures**: Columns for aggregation with default `agg` (sum, avg, count_distinct)
+- **calculated_measures**: Derived metrics as SQL expressions (CTR, CPC, CPM, AOV, conversion_rate)
+- **joins**: How fact tables relate to dimension tables (column mappings + join type)
+
+Served via `GET /semantic-layer/{tenant_slug}/config` endpoint in the platform API.
 
 ## Platform Governance Models
 
