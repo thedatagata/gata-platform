@@ -41,6 +41,16 @@ def get_semantic_layer(tenant_slug: str):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/semantic-layer/{tenant_slug}/config")
+def get_semantic_config(tenant_slug: str):
+    """Returns the BSL semantic config for a tenant."""
+    config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
+    if not config_path.exists():
+        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
 @app.post("/semantic-layer/update")
 async def update_logic(tenant_slug: str, platform: str, logic_payload: dict):
     # 1. Update tenants.yaml 

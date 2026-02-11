@@ -1,0 +1,148 @@
+tenant:
+  slug: wayne_enterprises
+  business_name: Wayne Enterprises
+  source_platforms:
+    ads: [bing_ads, google_ads]
+    ecommerce: [bigcommerce]
+    analytics: [google_analytics]
+
+models:
+  - name: fct_wayne_enterprises__ad_performance
+    label: Ad Performance
+    description: Daily ad spend and engagement metrics across all ad platforms.
+    dimensions:
+      - { name: source_platform, type: string }
+      - { name: report_date, type: date }
+      - { name: campaign_id, type: string }
+      - { name: ad_group_id, type: string }
+      - { name: ad_id, type: string }
+    measures:
+      - { name: spend, type: number, agg: sum }
+      - { name: impressions, type: number, agg: sum }
+      - { name: clicks, type: number, agg: sum }
+      - { name: conversions, type: number, agg: sum }
+    calculated_measures:
+      - name: ctr
+        label: Click-Through Rate
+        sql: "CASE WHEN SUM(impressions) > 0 THEN SUM(clicks) * 1.0 / SUM(impressions) ELSE 0 END"
+        format: percent
+      - name: cpc
+        label: Cost Per Click
+        sql: "CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END"
+        format: currency
+      - name: cpm
+        label: Cost Per Mille
+        sql: "CASE WHEN SUM(impressions) > 0 THEN SUM(spend) * 1000.0 / SUM(impressions) ELSE 0 END"
+        format: currency
+    joins:
+      - to: dim_wayne_enterprises__campaigns
+        type: left
+        on: { campaign_id: campaign_id, source_platform: source_platform }
+
+  - name: fct_wayne_enterprises__orders
+    label: Orders
+    description: Ecommerce transactions with customer and financial details.
+    dimensions:
+      - { name: source_platform, type: string }
+      - { name: order_date, type: timestamp }
+      - { name: currency, type: string }
+      - { name: financial_status, type: string }
+      - { name: customer_email, type: string }
+      - { name: customer_id, type: string }
+    measures:
+      - { name: total_price, type: number, agg: sum }
+      - { name: order_id, type: number, agg: count_distinct }
+    calculated_measures:
+      - name: aov
+        label: Average Order Value
+        sql: "CASE WHEN COUNT(DISTINCT order_id) > 0 THEN SUM(total_price) / COUNT(DISTINCT order_id) ELSE 0 END"
+        format: currency
+    joins:
+      - to: dim_wayne_enterprises__users
+        type: left
+        on: { customer_email: customer_email }
+
+  - name: fct_wayne_enterprises__sessions
+    label: Sessions
+    description: Sessionized web analytics with attribution, duration, and conversion flags.
+    dimensions:
+      - { name: source_platform, type: string }
+      - { name: user_pseudo_id, type: string }
+      - { name: session_start_ts, type: timestamp_epoch }
+      - { name: session_end_ts, type: timestamp_epoch }
+      - { name: traffic_source, type: string }
+      - { name: traffic_medium, type: string }
+      - { name: traffic_campaign, type: string }
+      - { name: geo_country, type: string }
+      - { name: device_category, type: string }
+      - { name: is_conversion_session, type: boolean }
+    measures:
+      - { name: session_duration_seconds, type: number, agg: avg }
+      - { name: events_in_session, type: number, agg: avg }
+      - { name: session_revenue, type: number, agg: sum }
+      - { name: session_id, type: string, agg: count_distinct }
+    calculated_measures:
+      - name: conversion_rate
+        label: Session Conversion Rate
+        sql: "CASE WHEN COUNT(DISTINCT session_id) > 0 THEN SUM(CASE WHEN is_conversion_session THEN 1 ELSE 0 END) * 1.0 / COUNT(DISTINCT session_id) ELSE 0 END"
+        format: percent
+    joins:
+      - to: dim_wayne_enterprises__users
+        type: left
+        on: { user_pseudo_id: user_pseudo_id }
+      - to: dim_wayne_enterprises__campaigns
+        type: left
+        on: { traffic_campaign: campaign_name }
+
+  - name: fct_wayne_enterprises__events
+    label: Events
+    description: Raw analytics events with attribution and optional ecommerce data.
+    dimensions:
+      - { name: source_platform, type: string }
+      - { name: event_name, type: string }
+      - { name: event_timestamp, type: timestamp_epoch }
+      - { name: user_pseudo_id, type: string }
+      - { name: session_id, type: string }
+      - { name: order_id, type: string }
+      - { name: traffic_source, type: string }
+      - { name: traffic_medium, type: string }
+      - { name: traffic_campaign, type: string }
+      - { name: geo_country, type: string }
+      - { name: device_category, type: string }
+    measures:
+      - { name: event_timestamp, type: number, agg: count, label: event_count }
+      - { name: order_total, type: number, agg: sum }
+    joins:
+      - to: dim_wayne_enterprises__users
+        type: left
+        on: { user_pseudo_id: user_pseudo_id }
+
+  - name: dim_wayne_enterprises__campaigns
+    label: Campaigns
+    description: Campaign dimension with name and status across ad platforms.
+    dimensions:
+      - { name: source_platform, type: string }
+      - { name: campaign_id, type: string }
+      - { name: campaign_name, type: string }
+      - { name: campaign_status, type: string }
+    measures: []
+    joins: []
+
+  - name: dim_wayne_enterprises__users
+    label: Users
+    description: Unified user dimension combining analytics and ecommerce identities.
+    dimensions:
+      - { name: source_platform, type: string }
+      - { name: user_pseudo_id, type: string }
+      - { name: user_id, type: string }
+      - { name: customer_email, type: string }
+      - { name: customer_id, type: string }
+      - { name: is_customer, type: boolean }
+      - { name: first_seen_at, type: timestamp_epoch }
+      - { name: last_seen_at, type: timestamp_epoch }
+      - { name: first_geo_country, type: string }
+      - { name: first_device_category, type: string }
+    measures:
+      - { name: total_events, type: number, agg: sum }
+      - { name: total_sessions, type: number, agg: sum }
+    joins: []

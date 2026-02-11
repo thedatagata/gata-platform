@@ -6,5 +6,6 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi",
     "uvicorn",
-    "duckdb"
+    "duckdb",
+    "pyyaml"
 ]
