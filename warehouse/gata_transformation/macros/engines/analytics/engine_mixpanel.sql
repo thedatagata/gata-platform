@@ -57,10 +57,102 @@ SELECT
     FALSE AS is_conversion_session,
     {% endif %}
 
-    CAST(0 AS DOUBLE) AS session_revenue,
-    CAST(NULL AS VARCHAR) AS transaction_id
+    SUM(COALESCE(prop_revenue, 0)) AS session_revenue,
+    MAX(CASE WHEN prop_order_id IS NOT NULL THEN prop_order_id END) AS transaction_id
 
 FROM sessioned
 GROUP BY tenant_slug, source_platform, user_pseudo_id, session_number
+
+{% endmacro %}
+
+
+{#
+  Engine: Mixpanel → Raw Events
+  One row per event for fct_events
+#}
+{% macro engine_mixpanel_events(tenant_slug) %}
+
+SELECT
+    tenant_slug,
+    source_platform,
+    event_name,
+    event_timestamp,
+    user_pseudo_id,
+    user_id,
+    CAST(NULL AS VARCHAR) AS session_id,
+    prop_order_id AS order_id,
+    prop_revenue AS order_total,
+    traffic_source,
+    traffic_medium,
+    traffic_campaign,
+    geo_country,
+    device_category
+FROM {{ ref('int_' ~ tenant_slug ~ '__mixpanel_events') }}
+
+{% endmacro %}
+
+
+{#
+  Engine: Mixpanel → Users (Identity Resolution)
+  Aggregates analytics users and resolves to ecommerce customers via order_id
+#}
+{% macro engine_mixpanel_users(tenant_slug) %}
+
+WITH events AS (
+    SELECT * FROM {{ ref('fct_' ~ tenant_slug ~ '__events') }}
+),
+
+user_agg AS (
+    SELECT
+        tenant_slug,
+        source_platform,
+        user_pseudo_id,
+        ANY_VALUE(user_id) AS user_id,
+        MIN(event_timestamp) AS first_seen_at,
+        MAX(event_timestamp) AS last_seen_at,
+        COUNT(*) AS total_events,
+        COUNT(DISTINCT session_id) AS total_sessions,
+        ARG_MIN(geo_country, event_timestamp) AS first_geo_country,
+        ARG_MIN(device_category, event_timestamp) AS first_device_category
+    FROM events
+    GROUP BY tenant_slug, source_platform, user_pseudo_id
+),
+
+purchase_links AS (
+    SELECT DISTINCT user_pseudo_id, order_id
+    FROM events
+    WHERE order_id IS NOT NULL
+),
+
+orders AS (
+    SELECT * FROM {{ ref('fct_' ~ tenant_slug ~ '__orders') }}
+),
+
+resolved AS (
+    SELECT
+        pl.user_pseudo_id,
+        MAX(o.customer_email) AS customer_email,
+        MAX(o.customer_id) AS customer_id
+    FROM purchase_links pl
+    INNER JOIN orders o ON CAST(pl.order_id AS VARCHAR) = CAST(o.order_id AS VARCHAR)
+    GROUP BY pl.user_pseudo_id
+)
+
+SELECT
+    ua.tenant_slug,
+    ua.source_platform,
+    ua.user_pseudo_id,
+    ua.user_id,
+    r.customer_email,
+    r.customer_id,
+    CASE WHEN r.customer_email IS NOT NULL THEN TRUE ELSE FALSE END AS is_customer,
+    ua.first_seen_at,
+    ua.last_seen_at,
+    ua.total_events,
+    ua.total_sessions,
+    ua.first_geo_country,
+    ua.first_device_category
+FROM user_agg ua
+LEFT JOIN resolved r ON ua.user_pseudo_id = r.user_pseudo_id
 
 {% endmacro %}

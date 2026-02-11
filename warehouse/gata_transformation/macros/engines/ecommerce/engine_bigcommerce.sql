@@ -11,7 +11,7 @@ SELECT
     total_price,
     currency,
     order_status        AS financial_status,
-    CAST(NULL AS VARCHAR) AS customer_email,
+    billing_email AS customer_email,
     CAST(customer_id AS VARCHAR) AS customer_id,
     CAST(NULL AS JSON)  AS line_items_json
 FROM {{ ref('int_' ~ tenant_slug ~ '__bigcommerce_orders') }}

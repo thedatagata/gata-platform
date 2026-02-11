@@ -16,3 +16,13 @@ SELECT
     conversions
 FROM {{ ref('int_' ~ tenant_slug ~ '__tiktok_ads_ads_reports_daily') }}
 {% endmacro %}
+
+{% macro engine_tiktok_ads_campaigns(tenant_slug) %}
+SELECT
+    tenant_slug,
+    source_platform,
+    campaign_id,
+    campaign_name,
+    status AS campaign_status
+FROM {{ ref('int_' ~ tenant_slug ~ '__tiktok_ads_campaigns') }}
+{% endmacro %}

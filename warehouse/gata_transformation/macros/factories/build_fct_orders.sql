@@ -1,33 +1,29 @@
 {#
   Factory: Orders
-  Unions all ecommerce engines for a tenant's enabled ecommerce sources.
-  
-  Usage: {{ build_fct_orders('tyrell_corp', ['shopify']) }}
-  
-  Source → Engine mapping:
-    shopify      → engine_shopify_orders
-    bigcommerce  → engine_bigcommerce_orders
-    woocommerce  → engine_woocommerce_orders
+  Finds the tenant's single ecommerce engine and calls it.
+  Discovers engine by convention: engine_{source}_orders
+
+  Usage: {{ build_fct_orders('tyrell_corp') }}
 #}
-{% macro build_fct_orders(tenant_slug, ecommerce_sources) %}
+{% macro build_fct_orders(tenant_slug) %}
 
-{%- set engine_map = {
-    'shopify':      'engine_shopify_orders',
-    'bigcommerce':  'engine_bigcommerce_orders',
-    'woocommerce':  'engine_woocommerce_orders'
-} -%}
+{%- set tenant_config = get_tenant_config(tenant_slug) -%}
+{%- set ns = namespace(engine_fn=none) -%}
 
-{%- set ns = namespace(first=true) -%}
+{%- if tenant_config and tenant_config.get('sources') -%}
+    {%- for source, config in tenant_config['sources'].items() -%}
+        {%- if config.get('enabled') and ns.engine_fn is none -%}
+            {%- set found = context.get('engine_' ~ source ~ '_orders') -%}
+            {%- if found -%}
+                {%- set ns.engine_fn = found -%}
+            {%- endif -%}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endif -%}
 
-{%- for source in ecommerce_sources -%}
-    {%- if source in engine_map -%}
-        {%- if not ns.first %} UNION ALL {% endif -%}
-        {{ context[engine_map[source]](tenant_slug) }}
-        {%- set ns.first = false -%}
-    {%- endif -%}
-{%- endfor -%}
-
-{%- if ns.first -%}
+{%- if ns.engine_fn is not none -%}
+    {{ ns.engine_fn(tenant_slug) }}
+{%- else -%}
     SELECT
         CAST(NULL AS VARCHAR)   AS tenant_slug,
         CAST(NULL AS VARCHAR)   AS source_platform,

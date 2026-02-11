@@ -1,0 +1,1 @@
+{{ build_fct_events('stark_industries') }}

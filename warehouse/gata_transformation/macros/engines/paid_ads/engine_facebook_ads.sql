@@ -17,3 +17,13 @@ SELECT
     conversions
 FROM {{ ref('int_' ~ tenant_slug ~ '__facebook_ads_facebook_insights') }}
 {% endmacro %}
+
+{% macro engine_facebook_ads_campaigns(tenant_slug) %}
+SELECT
+    tenant_slug,
+    source_platform,
+    campaign_id,
+    campaign_name,
+    status AS campaign_status
+FROM {{ ref('int_' ~ tenant_slug ~ '__facebook_ads_campaigns') }}
+{% endmacro %}

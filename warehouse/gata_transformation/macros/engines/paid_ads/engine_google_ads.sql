@@ -16,3 +16,13 @@ SELECT
     conversions
 FROM {{ ref('int_' ~ tenant_slug ~ '__google_ads_ad_performance') }}
 {% endmacro %}
+
+{% macro engine_google_ads_campaigns(tenant_slug) %}
+SELECT
+    tenant_slug,
+    source_platform,
+    campaign_id,
+    campaign_name,
+    status AS campaign_status
+FROM {{ ref('int_' ~ tenant_slug ~ '__google_ads_campaigns') }}
+{% endmacro %}

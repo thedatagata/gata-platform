@@ -17,3 +17,13 @@ SELECT
     CAST(NULL AS DOUBLE)    AS conversions
 FROM {{ ref('int_' ~ tenant_slug ~ '__bing_ads_account_performance_report') }}
 {% endmacro %}
+
+{% macro engine_bing_ads_campaigns(tenant_slug) %}
+SELECT
+    tenant_slug,
+    source_platform,
+    campaign_id,
+    campaign_name,
+    status AS campaign_status
+FROM {{ ref('int_' ~ tenant_slug ~ '__bing_ads_campaigns') }}
+{% endmacro %}

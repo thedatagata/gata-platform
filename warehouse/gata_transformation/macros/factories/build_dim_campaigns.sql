@@ -1,47 +1,27 @@
 {#
   Factory: Campaign Dimension
-  Builds dim_campaigns by pulling campaign metadata from each ad source's 
-  intermediate campaign model.
-  
-  Usage: {{ build_dim_campaigns('tyrell_corp', ['facebook_ads', 'google_ads', 'instagram_ads']) }}
-  
-  Source → Intermediate model mapping:
-    facebook_ads     → int_{slug}__facebook_ads_campaigns
-    instagram_ads    → int_{slug}__instagram_ads_campaigns
-    google_ads       → int_{slug}__google_ads_campaigns
-    bing_ads         → int_{slug}__bing_ads_campaigns
-    linkedin_ads     → int_{slug}__linkedin_ads_campaigns
-    amazon_ads       → int_{slug}__amazon_ads_sponsored_products_campaigns
-    tiktok_ads       → int_{slug}__tiktok_ads_campaigns
+  Unions campaign engines for a tenant's enabled sources.
+  Discovers engines by convention: engine_{source}_campaigns
+
+  Usage: {{ build_dim_campaigns('tyrell_corp') }}
 #}
-{% macro build_dim_campaigns(tenant_slug, ad_sources) %}
+{% macro build_dim_campaigns(tenant_slug) %}
 
-{%- set source_table_map = {
-    'facebook_ads':   'facebook_ads_campaigns',
-    'instagram_ads':  'instagram_ads_campaigns',
-    'google_ads':     'google_ads_campaigns',
-    'bing_ads':       'bing_ads_campaigns',
-    'linkedin_ads':   'linkedin_ads_campaigns',
-    'amazon_ads':     'amazon_ads_sponsored_products_campaigns',
-    'tiktok_ads':     'tiktok_ads_campaigns'
-} -%}
-
+{%- set tenant_config = get_tenant_config(tenant_slug) -%}
 {%- set ns = namespace(first=true) -%}
 
-{%- for source in ad_sources -%}
-    {%- if source in source_table_map -%}
-        {%- set int_model = 'int_' ~ tenant_slug ~ '__' ~ source_table_map[source] -%}
-        {%- if not ns.first %} UNION ALL {% endif -%}
-        SELECT
-            tenant_slug,
-            source_platform,
-            campaign_id,
-            campaign_name,
-            status AS campaign_status
-        FROM {{ ref(int_model) }}
-        {%- set ns.first = false -%}
-    {%- endif -%}
-{%- endfor -%}
+{%- if tenant_config and tenant_config.get('sources') -%}
+    {%- for source, config in tenant_config['sources'].items() -%}
+        {%- if config.get('enabled') -%}
+            {%- set engine_fn = context.get('engine_' ~ source ~ '_campaigns') -%}
+            {%- if engine_fn -%}
+                {%- if not ns.first %} UNION ALL {% endif -%}
+                {{ engine_fn(tenant_slug) }}
+                {%- set ns.first = false -%}
+            {%- endif -%}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endif -%}
 
 {%- if ns.first -%}
     SELECT

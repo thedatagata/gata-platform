@@ -16,3 +16,13 @@ SELECT
     conversions
 FROM {{ ref('int_' ~ tenant_slug ~ '__amazon_ads_sponsored_products_product_ads') }}
 {% endmacro %}
+
+{% macro engine_amazon_ads_campaigns(tenant_slug) %}
+SELECT
+    tenant_slug,
+    source_platform,
+    campaign_id,
+    campaign_name,
+    status AS campaign_status
+FROM {{ ref('int_' ~ tenant_slug ~ '__amazon_ads_campaigns') }}
+{% endmacro %}

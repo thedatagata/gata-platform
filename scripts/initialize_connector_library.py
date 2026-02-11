@@ -52,7 +52,7 @@ def load_connectors_catalog(target='dev'):
         
         # INCREASED TO 30 DAYS: Ensures high categorical density for DNA established
         orch = MockOrchestrator(dummy_tenant, days=30, credentials='duckdb' if target in ('sandbox', 'local') else 'motherduck')
-        dlt_schema_dict = orch.run() 
+        dlt_schema_dict, _dlt_load_id = orch.run()
 
         for table_name in dlt_schema_dict.get('tables', {}).keys():
             prefix = f"raw_library_sample_{source_name}_"

@@ -1,42 +1,29 @@
 {#
   Factory: Ad Performance
-  Unions all paid ad engines for a tenant's enabled ad sources.
-  
-  Usage: {{ build_fct_ad_performance('tyrell_corp', ['facebook_ads', 'google_ads', 'instagram_ads']) }}
-  
-  Source → Engine mapping:
-    facebook_ads     → engine_facebook_ads_performance
-    instagram_ads    → engine_instagram_ads_performance
-    google_ads       → engine_google_ads_performance
-    bing_ads         → engine_bing_ads_performance
-    linkedin_ads     → engine_linkedin_ads_performance
-    amazon_ads       → engine_amazon_ads_performance
-    tiktok_ads       → engine_tiktok_ads_performance
+  Unions all paid ad engines for a tenant's enabled sources.
+  Discovers engines by convention: engine_{source}_performance
+
+  Usage: {{ build_fct_ad_performance('tyrell_corp') }}
 #}
-{% macro build_fct_ad_performance(tenant_slug, ad_sources) %}
+{% macro build_fct_ad_performance(tenant_slug) %}
 
-{%- set engine_map = {
-    'facebook_ads':   'engine_facebook_ads_performance',
-    'instagram_ads':  'engine_instagram_ads_performance',
-    'google_ads':     'engine_google_ads_performance',
-    'bing_ads':       'engine_bing_ads_performance',
-    'linkedin_ads':   'engine_linkedin_ads_performance',
-    'amazon_ads':     'engine_amazon_ads_performance',
-    'tiktok_ads':     'engine_tiktok_ads_performance'
-} -%}
-
+{%- set tenant_config = get_tenant_config(tenant_slug) -%}
 {%- set ns = namespace(first=true) -%}
 
-{%- for source in ad_sources -%}
-    {%- if source in engine_map -%}
-        {%- if not ns.first %} UNION ALL {% endif -%}
-        {{ context[engine_map[source]](tenant_slug) }}
-        {%- set ns.first = false -%}
-    {%- endif -%}
-{%- endfor -%}
+{%- if tenant_config and tenant_config.get('sources') -%}
+    {%- for source, config in tenant_config['sources'].items() -%}
+        {%- if config.get('enabled') -%}
+            {%- set engine_fn = context.get('engine_' ~ source ~ '_performance') -%}
+            {%- if engine_fn -%}
+                {%- if not ns.first %} UNION ALL {% endif -%}
+                {{ engine_fn(tenant_slug) }}
+                {%- set ns.first = false -%}
+            {%- endif -%}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endif -%}
 
 {%- if ns.first -%}
-    {# No valid sources — return empty result set #}
     SELECT
         CAST(NULL AS VARCHAR) AS tenant_slug,
         CAST(NULL AS VARCHAR) AS source_platform,

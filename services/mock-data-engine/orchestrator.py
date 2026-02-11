@@ -390,11 +390,11 @@ def _run_simulation(
                     event_time += timedelta(seconds=rng.randint(lo, hi))
                     max_depth = step_idx
 
-                    result.events.append(_create_event(
-                        session, user, to_event, event_time,
-                        step_idx, browsed_product, rng,
-                    ))
+                    # Email assigned at add_payment_info (checkout identification)
+                    if to_event == "add_payment_info" and not user["email"]:
+                        user["email"] = f"{user['user_id'][:12]}@{fake.free_email_domain()}"
 
+                    # On purchase: create order FIRST so the event can carry linkage
                     if to_event == "purchase" and product_catalog:
                         order = _create_order(
                             session, user, event_time,
@@ -404,8 +404,21 @@ def _run_simulation(
                         session["converted"] = True
                         user["is_customer"] = True
                         user["order_count"] = user.get("order_count", 0) + 1
-                        if not user["email"]:
-                            user["email"] = f"{user['user_id'][:12]}@{fake.free_email_domain()}"
+
+                        # Create purchase event WITH order context
+                        purchase_event = _create_event(
+                            session, user, to_event, event_time,
+                            step_idx, browsed_product, rng,
+                        )
+                        purchase_event["order_id"] = order["order_id"]
+                        purchase_event["order_total"] = order["total_price"]
+                        purchase_event["customer_email"] = order["customer_email"]
+                        result.events.append(purchase_event)
+                    else:
+                        result.events.append(_create_event(
+                            session, user, to_event, event_time,
+                            step_idx, browsed_product, rng,
+                        ))
                 else:
                     break
 
@@ -711,12 +724,13 @@ def _format_bigcommerce(products: List[Dict], sim: SimulationResult) -> Dict[str
         is_paid = o["financial_status"] == "paid"
         sid, sname = status_map[is_paid]
         orders.append({
-            "id": o["order_id"] % 200000 + 90000,
+            "id": o["order_id"],
             "status_id": sid,
             "status": sname,
             "total_price": o["total_price"],
             "currency": o["currency"],
             "customer_id": hash(o["customer_id"]) % 1500 + 500,
+            "billing_email": o["customer_email"],
             "created_at": o["timestamp"],
         })
 
@@ -740,14 +754,6 @@ def _format_ga4(sim: SimulationResult) -> Dict[str, List[dict]]:
     for evt in sim.events:
         session = sim.session_index.get(evt["session_id"], {})
 
-        # Match transaction data for purchase events
-        order_match = None
-        if evt["event_name"] == "purchase":
-            for o in sim.orders:
-                if o["session_id"] == evt["session_id"]:
-                    order_match = o
-                    break
-
         ga4_events.append({
             "event_name": evt["event_name"],
             "event_date": evt["timestamp"].strftime("%Y%m%d"),
@@ -761,8 +767,8 @@ def _format_ga4(sim: SimulationResult) -> Dict[str, List[dict]]:
             "traffic_source_campaign": session.get("utm_campaign", "(not set)"),
             "device_category": session.get("device_category", "mobile"),
             "ga_session_id": evt["session_id"][-8:],
-            "ecommerce_transaction_id": str(order_match["order_id"]) if order_match else "N/A",
-            "ecommerce_value": float(order_match["total_price"]) if order_match else 0.0,
+            "ecommerce_transaction_id": str(evt["order_id"]) if evt.get("order_id") else "N/A",
+            "ecommerce_value": float(evt["order_total"]) if evt.get("order_total") else 0.0,
             "ecommerce_currency": "USD",
         })
 
@@ -774,14 +780,21 @@ def _format_amplitude(sim: SimulationResult) -> Dict[str, List[dict]]:
     amp_events = []
     for evt in sim.events:
         user = sim.user_index.get(evt["user_id"], {})
-        amp_events.append({
+        event_data = {
             "event_id": evt["event_id"],
             "event_type": evt["event_name"],
             "user_id": evt["user_id"],
             "event_time": evt["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
             "device_type": user.get("device_category", "Unknown"),
             "country": user.get("geo_country", "N/A"),
-        })
+        }
+
+        # Purchase events carry order context from the simulation core
+        if evt.get("order_id"):
+            event_data["revenue"] = float(evt["order_total"])
+            event_data["order_id"] = str(evt["order_id"])
+
+        amp_events.append(event_data)
 
     amp_users = []
     for user in sim.users:
@@ -800,7 +813,7 @@ def _format_mixpanel(sim: SimulationResult) -> Dict[str, List[dict]]:
     for evt in sim.events:
         session = sim.session_index.get(evt["session_id"], {})
         user = sim.user_index.get(evt["user_id"], {})
-        mp_events.append({
+        event_data = {
             "event": evt["event_name"],
             "prop_distinct_id": evt["user_id"],
             "prop_time": int(evt["timestamp"].timestamp()),
@@ -811,7 +824,14 @@ def _format_mixpanel(sim: SimulationResult) -> Dict[str, List[dict]]:
             "prop_utm_source": session.get("utm_source"),
             "prop_utm_medium": session.get("utm_medium"),
             "prop_utm_campaign": session.get("utm_campaign"),
-        })
+        }
+
+        # Enrich purchase events with order linkage
+        if evt.get("order_id"):
+            event_data["prop_order_id"] = str(evt["order_id"])
+            event_data["prop_revenue"] = float(evt["order_total"])
+
+        mp_events.append(event_data)
 
     mp_people = []
     for user in sim.users:

@@ -81,7 +81,7 @@ def generate_scaffolding(tenant_slug, target, days=30):
     # 1. LAND DATA
     print(f"[LOAD] Loading mock data for {tenant_slug}...")
     orchestrator = MockOrchestrator(tenant_config, days=days, credentials='duckdb' if target in ('sandbox', 'local') else 'motherduck')
-    dlt_schema_dict = orchestrator.run() 
+    dlt_schema_dict, _dlt_load_id = orchestrator.run()
 
     # 2. GENERATE DBT MODELS DYNAMICALLY
     tenant_prefix = f"raw_{tenant_slug}_"

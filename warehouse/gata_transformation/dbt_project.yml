@@ -4,6 +4,27 @@ config-version: 2
 
 vars:
   dlt_load_id: "manual_run"
+  tenant_configs:
+    tenants:
+      - slug: tyrell_corp
+        sources:
+          facebook_ads: {enabled: true}
+          google_ads: {enabled: true}
+          instagram_ads: {enabled: true}
+          shopify: {enabled: true}
+          google_analytics: {enabled: true, logic: {conversion_events: ["purchase"]}}
+      - slug: wayne_enterprises
+        sources:
+          bing_ads: {enabled: true}
+          google_ads: {enabled: true}
+          bigcommerce: {enabled: true}
+          google_analytics: {enabled: true, logic: {conversion_events: ["purchase"]}}
+      - slug: stark_industries
+        sources:
+          facebook_ads: {enabled: true}
+          instagram_ads: {enabled: true}
+          woocommerce: {enabled: true}
+          mixpanel: {enabled: true, logic: {conversion_events: ["purchase"]}}
 
 require-dbt-version: ">=1.8.0"
 
@@ -28,3 +49,17 @@ on-run-end:
   - "{{ upload_run_results() }}"
   - "{{ upload_model_definitions() }}"
   - "{{ upload_test_definitions() }}"
+
+models:
+  gata_transformation:
+    sources:
+      +materialized: view
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table
+    analytics:
+      +materialized: table
+      +tags: ["reporting"]
+    platform:
+      +materialized: table
