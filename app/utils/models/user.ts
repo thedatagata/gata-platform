@@ -9,6 +9,7 @@ export interface User {
   ai_addon_unlocked: boolean;
   ai_analyst_unlocked: boolean;
   preferred_model_tier?: "3b" | "7b";
+  tenant_slug?: string;
   motherDuckToken?: string;
   googleAccessToken?: string;
   googleRefreshToken?: string;
@@ -29,6 +30,7 @@ export async function createUser(
     ai_addon_unlocked?: boolean;
     ai_analyst_unlocked?: boolean;
     preferred_model_tier?: "3b" | "7b";
+    tenant_slug?: string;
     demoEmail?: string;
   }
 ): Promise<User> {
@@ -44,6 +46,7 @@ export async function createUser(
     ai_addon_unlocked: data.ai_addon_unlocked || false,
     ai_analyst_unlocked: data.ai_analyst_unlocked || false,
     preferred_model_tier: data.preferred_model_tier || "3b",
+    tenant_slug: data.tenant_slug,
     demoEmail: data.demoEmail,
     securityRestricted: false,
     createdAt: new Date(),

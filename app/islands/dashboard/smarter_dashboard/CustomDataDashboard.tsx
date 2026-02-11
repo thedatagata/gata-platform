@@ -24,15 +24,17 @@ interface CustomDataDashboardProps {
   semanticConfig: SemanticLayer | SemanticMetadata;
   seedingInfo?: SeedingInfo;
   onBack: () => void;
+  onShowObservability?: () => void;
 }
 
-export default function CustomDataDashboard({ 
-  db, 
-  webllmEngine, 
-  tableName, 
-  semanticConfig, 
+export default function CustomDataDashboard({
+  db,
+  webllmEngine,
+  tableName,
+  semanticConfig,
   seedingInfo,
-  onBack 
+  onBack,
+  onShowObservability,
 }: CustomDataDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [showCatalog, setShowCatalog] = useState(false);
@@ -309,6 +311,15 @@ export default function CustomDataDashboard({
           {metadata && <p class="text-xs text-gata-cream/40 font-medium uppercase tracking-[0.2em] mt-1">{metadata.description}</p>}
         </div>
         <div class="flex gap-4">
+          {onShowObservability && (
+            <button
+              type="button"
+              onClick={onShowObservability}
+              class="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all bg-gata-dark/60 text-gata-cream/40 border border-gata-green/20 hover:text-gata-green"
+            >
+              Pipeline Health
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowCatalog(!showCatalog)}

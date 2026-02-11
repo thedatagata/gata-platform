@@ -10,6 +10,7 @@ interface DashboardData {
   ldClientId?: string;
   isAllowed: boolean;
   email?: string;
+  tenantSlug?: string;
 }
 
 export const handler: Handlers<DashboardData> = {
@@ -44,18 +45,19 @@ export const handler: Handlers<DashboardData> = {
     const isAllowed = true;
 
     // SECURITY: Only pass the token if the user is allowed
-    return ctx.render({ 
-      motherDuckToken, 
+    return ctx.render({
+      motherDuckToken,
       sessionId,
       ldClientId,
       isAllowed,
       email: user?.email || session.username,
+      tenantSlug: user?.tenant_slug || undefined,
     });
   }
 };
 
 export default function DashboardPage({ data }: PageProps<DashboardData>) {
-  const { motherDuckToken, sessionId, ldClientId, isAllowed, email } = data;
+  const { motherDuckToken, sessionId, ldClientId, isAllowed, email, tenantSlug } = data;
 
   // 1. Access Denied State
   if (!isAllowed) {
@@ -108,10 +110,11 @@ export default function DashboardPage({ data }: PageProps<DashboardData>) {
 
   // 3. Dashboard State (Allowed)
   return (
-    <DashboardRouter 
+    <DashboardRouter
       motherDuckToken={motherDuckToken}
       sessionId={sessionId}
       ldClientId={ldClientId}
+      tenantSlug={tenantSlug}
     />
   );
 }
