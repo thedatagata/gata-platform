@@ -10,4 +10,7 @@ dependencies = [
     "pyyaml",
     "pydantic",
     "httpx",
+    "langchain-ollama",
+    "langchain-core",
+    "boring-semantic-layer[agent]",
 ]

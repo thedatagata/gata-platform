@@ -113,3 +113,39 @@ class IdentityResolutionStats(BaseModel):
     resolution_rate: float
     total_events: int
     total_sessions: int
+
+
+# --- BSL Agent Models ---
+
+class AskRequest(BaseModel):
+    """Natural language analytics question."""
+    question: str
+    max_records: int = 100
+
+    @field_validator("max_records")
+    @classmethod
+    def validate_max_records(cls, v: int) -> int:
+        if v > 1000:
+            raise ValueError("max_records cannot exceed 1000")
+        return v
+
+
+class AskResponse(BaseModel):
+    """Response from BSL agent."""
+    answer: str
+    records: list[dict] = []
+    sql: str = ""
+    chart_spec: dict | None = None
+    model_used: str = ""
+    provider: str = ""
+    execution_time_ms: int = 0
+    tool_calls: list[dict] = []
+    error: str | None = None
+
+
+class LLMProviderStatus(BaseModel):
+    """Status of the LLM provider."""
+    provider: str
+    model: str = ""
+    is_available: bool = False
+    error: str = ""

@@ -11,8 +11,11 @@ from models import (
     SemanticQueryRequest, SemanticQueryResponse, ColumnInfo,
     ModelSummary, ModelDetail,
     ObservabilitySummary, RunResult, TestResult, IdentityResolutionStats,
+    AskRequest, AskResponse, LLMProviderStatus,
 )
 from query_builder import QueryBuilder
+from bsl_agent import ask as bsl_ask
+from llm_provider import get_llm_provider
 
 app = FastAPI()
 TENANTS_YAML = Path(__file__).parent.parent.parent / "tenants.yaml"
@@ -24,6 +27,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- BSL LLM Status Endpoints (before {tenant_slug} routes to avoid path conflicts) ---
+
+@app.get("/semantic-layer/llm-status", response_model=LLMProviderStatus)
+def get_llm_status():
+    """Check the current LLM provider status."""
+    provider = get_llm_provider()
+    return LLMProviderStatus(
+        provider=provider.provider_name,
+        model=provider.model_name,
+        is_available=provider.is_available,
+        error=provider.error_message,
+    )
+
+
+@app.post("/semantic-layer/llm-refresh")
+def refresh_llm_provider():
+    """Force refresh the LLM provider (re-check Ollama availability)."""
+    provider = get_llm_provider(force_refresh=True)
+    return {
+        "status": "refreshed",
+        "provider": provider.provider_name,
+        "is_available": provider.is_available,
+        "model": provider.model_name,
+        "error": provider.error_message,
+    }
 
 
 # --- Helpers ---
@@ -277,3 +307,26 @@ def get_identity_resolution(tenant_slug: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- BSL Natural Language Agent Endpoints ---
+
+@app.post("/semantic-layer/{tenant_slug}/ask", response_model=AskResponse)
+def ask_question(tenant_slug: str, request: AskRequest):
+    """
+    Ask a natural language analytics question.
+
+    Routes through BSL agent with Ollama LLM if available,
+    falls back to keyword-based model suggestion otherwise.
+    """
+    config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
+    if not config_path.exists():
+        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
+
+    result = bsl_ask(request.question, tenant_slug)
+
+    # Trim records to max_records
+    if len(result.records) > request.max_records:
+        result.records = result.records[:request.max_records]
+
+    return AskResponse(**result.to_dict())
