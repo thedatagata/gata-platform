@@ -120,35 +120,64 @@ def _run_bsl_agent_loop(
         llm_with_tools = provider.llm.bind_tools(tools)
         ai_response = llm_with_tools.invoke(lc_messages)
 
-        # Process tool calls if any
+        # Extract tool calls — either from structured tool_calls or
+        # parsed from text content (smaller models like 7b often emit
+        # tool call JSON as plain text instead of using the protocol)
+        tool_calls_to_run = []
+
         if hasattr(ai_response, 'tool_calls') and ai_response.tool_calls:
-            for tool_call in ai_response.tool_calls:
-                tool_name = tool_call.get("name", "")
-                tool_args = tool_call.get("args", {})
-                response.tool_calls.append({
-                    "name": tool_name,
-                    "args": tool_args,
+            for tc in ai_response.tool_calls:
+                tool_calls_to_run.append({
+                    "name": tc.get("name", ""),
+                    "args": tc.get("args", {}),
                 })
 
-                # Execute the tool call against BSL
-                result = _execute_bsl_tool(
-                    tool_name, tool_args, semantic_tables, tenant_slug
-                )
-
-                if result.get("records"):
-                    response.records = result["records"]
-                if result.get("sql"):
-                    response.sql = result["sql"]
-                if result.get("model"):
-                    response.model_used = result["model"]
-
-        # Get the text answer
-        if hasattr(ai_response, 'content') and ai_response.content:
-            response.answer = ai_response.content
-        elif response.records:
-            response.answer = (
-                f"Found {len(response.records)} records from {response.model_used}."
+        if not tool_calls_to_run:
+            # Try parsing tool call JSON from the text content
+            parsed = _parse_tool_call_from_text(
+                getattr(ai_response, 'content', '') or ''
             )
+            if parsed:
+                tool_calls_to_run.append(parsed)
+
+        # Execute tool calls
+        tool_error = ""
+        for tool_call in tool_calls_to_run:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            response.tool_calls.append(tool_call)
+
+            result = _execute_bsl_tool(
+                tool_name, tool_args, semantic_tables, tenant_slug
+            )
+
+            if result.get("records"):
+                response.records = result["records"]
+            if result.get("sql"):
+                response.sql = result["sql"]
+            if result.get("model"):
+                response.model_used = result["model"]
+            if result.get("error"):
+                tool_error = result["error"]
+
+        # Build the answer — prefer data summary over raw LLM text
+        if response.records:
+            response.answer = (
+                f"Found {len(response.records)} records from "
+                f"**{response.model_used}**."
+            )
+        elif tool_error:
+            response.answer = f"Query failed: {tool_error}"
+            response.error = tool_error
+        elif tool_calls_to_run:
+            # Tool calls were made but returned no data
+            response.answer = (
+                f"Query executed against {response.model_used or 'unknown model'} "
+                f"but returned no records."
+            )
+        elif hasattr(ai_response, 'content') and ai_response.content:
+            # No tool calls parsed — return the LLM's text as-is
+            response.answer = ai_response.content
         else:
             response.answer = "I processed your question but didn't find matching data."
 
@@ -159,6 +188,44 @@ def _run_bsl_agent_loop(
 
     response.execution_time_ms = int((time.time() - start) * 1000)
     return response
+
+
+def _parse_tool_call_from_text(content: str) -> Optional[dict]:
+    """
+    Parse a tool call from LLM text content.
+
+    Smaller models (e.g., qwen2.5-coder:7b) often emit tool call JSON
+    as plain text rather than using the structured tool-calling protocol.
+    This function extracts the tool name and arguments from that text.
+    """
+    if not content:
+        return None
+
+    try:
+        # Try direct JSON parse first
+        data = json.loads(content.strip())
+        if isinstance(data, dict) and "name" in data and "arguments" in data:
+            return {"name": data["name"], "args": data["arguments"]}
+    except (json.JSONDecodeError, KeyError):
+        pass
+
+    # Try extracting JSON from markdown code blocks or surrounding text
+    import re
+    json_patterns = [
+        r'```(?:json)?\s*(\{.*?\})\s*```',  # ```json { ... } ```
+        r'(\{[^{}]*"name"\s*:.*?"arguments"\s*:\s*\{.*?\}\s*\})',  # inline
+    ]
+    for pattern in json_patterns:
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                if "name" in data and "arguments" in data:
+                    return {"name": data["name"], "args": data["arguments"]}
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    return None
 
 
 def _build_bsl_tools(
@@ -254,7 +321,7 @@ def _execute_bsl_tool(
     tenant_slug: str,
 ) -> dict:
     """Execute a BSL tool call and return structured results."""
-    result = {"records": [], "sql": "", "model": ""}
+    result = {"records": [], "sql": "", "model": "", "error": ""}
 
     if tool_name == "query_semantic_model":
         model_name = tool_args.get("model_name", "")
@@ -264,14 +331,46 @@ def _execute_bsl_tool(
 
         st = semantic_tables.get(model_name)
         if st is None:
+            result["error"] = f"Model '{model_name}' not found"
+            return result
+
+        result["model"] = model_name
+
+        # Filter dimensions/measures to only those that exist as
+        # registered BSL fields — prevents errors from LLM hallucination
+        valid_dims = []
+        valid_measures = []
+
+        config = _load_tenant_config(tenant_slug)
+        for mc in config.get("models", []):
+            if mc["name"] == model_name:
+                known_dims = {d["name"] for d in mc.get("dimensions", [])}
+                known_measures = {m["name"] for m in mc.get("measures", [])}
+                valid_dims = [d for d in dimensions if d in known_dims]
+                valid_measures = [m for m in measures if m in known_measures]
+
+                skipped = (
+                    set(dimensions) - known_dims
+                ) | (set(measures) - known_measures)
+                if skipped:
+                    logger.warning(
+                        f"[BSL Tool] Skipped unknown fields: {skipped}"
+                    )
+                break
+
+        if not valid_dims and not valid_measures:
+            result["error"] = (
+                f"No valid dimensions or measures for {model_name}. "
+                f"Requested dims={dimensions}, measures={measures}"
+            )
             return result
 
         try:
             query = st
-            if dimensions:
-                query = query.group_by(*dimensions)
-            if measures:
-                query = query.aggregate(*measures)
+            if valid_dims:
+                query = query.group_by(*valid_dims)
+            if valid_measures:
+                query = query.aggregate(*valid_measures)
 
             # Get the compiled SQL
             try:
@@ -289,10 +388,9 @@ def _execute_bsl_tool(
                     df.to_pandas().head(limit).to_dict(orient='records')
                 )
 
-            result["model"] = model_name
-
         except Exception as e:
             logger.error(f"[BSL Tool] Query error: {e}")
+            result["error"] = str(e)
 
     return result
 

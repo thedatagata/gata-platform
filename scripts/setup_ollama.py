@@ -24,7 +24,7 @@ except ImportError:
 
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_MODEL = "qwen2.5-coder:7b"
 
 
 def check_ollama_running() -> bool:

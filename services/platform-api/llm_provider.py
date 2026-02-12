@@ -27,7 +27,7 @@ class LLMProviderConfig:
     """Configuration for the LLM provider."""
     # Ollama settings
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5-coder:14b"
+    ollama_model: str = "qwen2.5-coder:7b"
     ollama_temperature: float = 0.0
     ollama_timeout: int = 120  # seconds — 14B can be slow on CPU
 
@@ -42,7 +42,7 @@ class LLMProviderConfig:
                 "OLLAMA_BASE_URL", "http://localhost:11434"
             ),
             ollama_model=os.environ.get(
-                "OLLAMA_MODEL", "qwen2.5-coder:14b"
+                "OLLAMA_MODEL", "qwen2.5-coder:7b"
             ),
             ollama_temperature=float(os.environ.get(
                 "OLLAMA_TEMPERATURE", "0.0"
