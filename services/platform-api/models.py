@@ -61,19 +61,19 @@ class ModelSummary(BaseModel):
     name: str
     label: str
     description: str
-    dimension_count: int
-    measure_count: int
-    has_joins: bool
+    dimension_count: int = 0
+    measure_count: int = 0
+    has_joins: bool = False
 
 
 class ModelDetail(BaseModel):
     name: str
     label: str
     description: str
-    dimensions: list[dict]
-    measures: list[dict]
-    calculated_measures: list[dict]
-    joins: list[dict]
+    dimensions: list[dict] = []
+    measures: list[dict] = []
+    calculated_measures: list[dict] = []
+    joins: list[dict] = []
 
 
 # --- Observability Models ---
@@ -139,7 +139,7 @@ class AskResponse(BaseModel):
     model_used: str = ""
     provider: str = ""
     execution_time_ms: int = 0
-    tool_calls: list[dict] = []
+    tool_calls: list[str] = []
     error: str | None = None
 
 

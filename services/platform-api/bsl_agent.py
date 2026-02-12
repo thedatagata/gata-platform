@@ -1,32 +1,51 @@
 """
-BSL Agent Service.
+BSL Agent Service — Natural Language Analytics via BSL Tools
 
-Orchestrates the LLM + BSLTools agent loop for natural language analytics.
-Handles the full flow: question -> BSL tools -> MotherDuck query -> response.
+Wraps per-tenant BSL SemanticModel objects (built from dbt metadata)
+into an agent loop that the LLM can call via tool functions.
 
-When an LLM is available (Ollama running), uses BSLTools' agent pattern
-with tool calling. When no LLM is available, falls back to keyword-based
-model selection + the structured QueryBuilder.
+Architecture follows the dlthub demo pattern:
+  - BSL SemanticModel.get_dimensions() / .get_measures() → catalog
+  - BSL query API: model.group_by("dim").aggregate("measure")
+  - LLM chooses which tools to call based on the user's question
+  - Keyword fallback when no LLM is available
+
+The key difference from vanilla BSLTools: instead of loading models from
+a YAML file, we inject pre-built models from create_tenant_semantic_models()
+which reads the dbt catalog.
 """
 
 import json
-import logging
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+import logging
+from dataclasses import dataclass, field, asdict
+from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
 
-from llm_provider import get_llm_provider, LLMProvider
-from bsl_model_builder import (
-    get_tenant_semantic_tables,
-    _load_tenant_config,
-)
+# BSL imports
+try:
+    from boring_semantic_layer.agents.tools import BSLTools
+    from boring_semantic_layer import SemanticModel
+    BSL_AVAILABLE = True
+except ImportError:
+    BSL_AVAILABLE = False
+    logger.warning("[BSL Agent] boring-semantic-layer not installed")
 
+# LLM imports
+try:
+    from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+
+
+# ───────────────────────────────────────────────────────────
+# Response model
+# ───────────────────────────────────────────────────────────
 
 @dataclass
 class AgentResponse:
-    """Response from the BSL agent."""
     answer: str = ""
     records: list[dict] = field(default_factory=list)
     sql: str = ""
@@ -34,456 +53,353 @@ class AgentResponse:
     model_used: str = ""
     provider: str = "none"
     execution_time_ms: int = 0
-    tool_calls: list[dict] = field(default_factory=list)
+    tool_calls: list[str] = field(default_factory=list)
     error: Optional[str] = None
 
     def to_dict(self) -> dict:
-        return {
-            "answer": self.answer,
-            "records": self.records,
-            "sql": self.sql,
-            "chart_spec": self.chart_spec,
-            "model_used": self.model_used,
-            "provider": self.provider,
-            "execution_time_ms": self.execution_time_ms,
-            "tool_calls": self.tool_calls,
-            "error": self.error,
-        }
+        return asdict(self)
 
 
-def _run_bsl_agent_loop(
-    question: str,
-    tenant_slug: str,
-    provider: LLMProvider,
-) -> AgentResponse:
+# ───────────────────────────────────────────────────────────
+# BSLTools subclass that accepts pre-built models
+# ───────────────────────────────────────────────────────────
+
+class GATABSLTools(BSLTools):
+    """BSLTools variant for API mode with pre-built models.
+
+    Overrides _query_model to force return_json=True and echarts backend
+    since we're serving an API, not a CLI.
     """
-    Run the full BSL agent loop with an LLM.
 
-    Uses LangChain tool-calling with BSL semantic tables. The LLM decides
-    which tools to call (list_models, query_model, get_schema) and we
-    execute them against the tenant's semantic tables.
-    """
-    start = time.time()
-    response = AgentResponse(provider=provider.provider_name)
+    def __init__(
+        self,
+        models: dict[str, SemanticModel],
+        chart_backend: str = "echarts",
+    ):
+        # Skip BSLTools.__init__ which calls from_yaml()
+        # Instead, set the attributes directly
+        self.model_path = None
+        self.profile = None
+        self.profile_file = None
+        self.chart_backend = chart_backend
+        self._error_callback = None
+        self.models = models
 
-    try:
-        # Get the tenant's semantic tables
-        semantic_tables = get_tenant_semantic_tables(tenant_slug)
-        if not semantic_tables:
-            response.error = f"No semantic tables found for tenant: {tenant_slug}"
-            return response
+    def _query_model(
+        self,
+        query: str,
+        get_records: bool = True,
+        records_limit: int | None = None,
+        records_displayed_limit: int | None = 10,
+        get_chart: bool = True,
+        chart_backend: str | None = None,
+        chart_format: str | None = None,
+        chart_spec: dict | None = None,
+    ) -> str:
+        """Override to force return_json=True and echarts backend for API mode."""
+        from boring_semantic_layer.agents.utils.chart_handler import generate_chart_with_data
+        from boring_semantic_layer.utils import safe_eval
+        from returns.result import Failure, Success
+        import ibis
+        from ibis import _
 
-        # Load tenant config for context
-        config = _load_tenant_config(tenant_slug)
-        tenant_name = config.get("tenant", {}).get("business_name", tenant_slug)
+        try:
+            result = safe_eval(query, context={**self.models, "ibis": ibis, "_": _})
+            if isinstance(result, Failure):
+                raise result.failure()
+            query_result = result.unwrap() if isinstance(result, Success) else result
 
-        # Build the system prompt with tenant context
-        model_descriptions = []
-        for model_config in config.get("models", []):
-            name = model_config["name"]
-            label = model_config.get("label", name)
-            desc = model_config.get("description", "")
-            dims = [d["name"] for d in model_config.get("dimensions", [])]
-            measures = [m["name"] for m in model_config.get("measures", [])]
-            calc = [c["name"] for c in model_config.get("calculated_measures", [])]
-
-            model_descriptions.append(
-                f"- **{label}** (`{name}`): {desc}\n"
-                f"  Dimensions: {', '.join(dims)}\n"
-                f"  Measures: {', '.join(measures)}\n"
-                f"  Calculated: {', '.join(calc) if calc else 'none'}"
+            return generate_chart_with_data(
+                query_result,
+                get_records=get_records,
+                records_limit=records_limit,
+                records_displayed_limit=records_displayed_limit,
+                get_chart=get_chart,
+                chart_backend=chart_backend or self.chart_backend,
+                chart_format=chart_format or "json",
+                chart_spec=chart_spec,
+                default_backend=self.chart_backend,
+                return_json=True,  # KEY: API mode returns JSON string
+                error_callback=self._error_callback,
             )
 
-        system_prompt = (
-            f"You are a data analyst for {tenant_name}. "
-            "You answer questions about their analytics data by querying "
-            "their semantic models.\n\n"
-            f"Available models:\n{chr(10).join(model_descriptions)}\n\n"
-            "When answering:\n"
-            "1. Pick the most relevant model for the question\n"
-            "2. Use query_semantic_model to fetch data\n"
-            "3. Keep answers concise and data-driven\n"
-            "4. If the question is ambiguous, pick the most likely interpretation\n\n"
-            f"The data is for tenant '{tenant_slug}' and all queries are "
-            "automatically scoped to their data."
+        except Exception as e:
+            error_str = str(e)
+            if len(error_str) > 300:
+                error_str = error_str[:300] + "..."
+
+            error_msg = f"Query Error: {error_str}"
+
+            # Try to provide schema hints on attribute errors
+            model_name = query.split(".")[0] if "." in query else None
+            if "has no attribute" in error_str and model_name:
+                try:
+                    schema = self._get_model(model_name)
+                    error_msg += f"\n\nAvailable fields for '{model_name}':\n{schema}"
+                except Exception:
+                    pass
+
+            from langchain_core.tools import ToolException
+            raise ToolException(error_msg) from e
+
+
+# ───────────────────────────────────────────────────────────
+# Agent loop
+# ───────────────────────────────────────────────────────────
+
+def _build_system_prompt(tenant_slug: str, models: dict[str, SemanticModel]) -> str:
+    """Build a system prompt with tenant context and model catalog."""
+    model_descriptions = []
+    for name, model in models.items():
+        dims = list(model.get_dimensions().keys())
+        measures = list(model.get_measures().keys())
+        desc = model.description or name
+        model_descriptions.append(
+            f"- **{name}**: {desc}\n"
+            f"  Dimensions: {', '.join(dims)}\n"
+            f"  Measures: {', '.join(measures)}"
         )
 
-        # Build tools and bind to LLM
-        from langchain_core.messages import SystemMessage, HumanMessage
+    models_text = "\n".join(model_descriptions)
 
-        lc_messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=question),
-        ]
+    return f"""You are a data analyst assistant for tenant '{tenant_slug}'.
+You have access to semantic models that let you query analytics data.
 
-        tools = _build_bsl_tools(semantic_tables, tenant_slug)
-        llm_with_tools = provider.llm.bind_tools(tools)
-        ai_response = llm_with_tools.invoke(lc_messages)
+Available models:
+{models_text}
 
-        # Extract tool calls — either from structured tool_calls or
-        # parsed from text content (smaller models like 7b often emit
-        # tool call JSON as plain text instead of using the protocol)
-        tool_calls_to_run = []
+To answer questions:
+1. Call list_models to see what's available
+2. Call get_model(model_name) to see dimensions and measures
+3. Call query_model with an Ibis-style query string like:
+   model_name.group_by("dimension").aggregate("measure1", "measure2")
 
-        if hasattr(ai_response, 'tool_calls') and ai_response.tool_calls:
-            for tc in ai_response.tool_calls:
-                tool_calls_to_run.append({
-                    "name": tc.get("name", ""),
-                    "args": tc.get("args", {}),
-                })
+Query syntax examples:
+- ad_performance.group_by("source_platform").aggregate("spend", "clicks")
+- orders.group_by("financial_status").aggregate("total_price")
+- sessions.group_by("traffic_source", "traffic_medium").aggregate("session_id", "session_revenue")
 
-        if not tool_calls_to_run:
-            # Try parsing tool call JSON from the text content
-            parsed = _parse_tool_call_from_text(
-                getattr(ai_response, 'content', '') or ''
-            )
-            if parsed:
-                tool_calls_to_run.append(parsed)
+Always call get_model first to see exact field names before querying.
+"""
 
-        # Execute tool calls
-        tool_error = ""
-        for tool_call in tool_calls_to_run:
+
+def _extract_query_results(result_str: str, response: AgentResponse, tool_args: dict):
+    """Parse BSLTools query_model JSON response to extract records + ECharts."""
+    try:
+        parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
+
+        if isinstance(parsed, dict):
+            # Records
+            if "records" in parsed:
+                response.records = parsed["records"]
+
+            # ECharts spec — extract from chart.data, not chart directly
+            chart_block = parsed.get("chart", {})
+            if isinstance(chart_block, dict) and "data" in chart_block:
+                response.chart_spec = chart_block["data"]
+
+            # SQL (if BSL exposes it)
+            if "sql" in parsed:
+                response.sql = parsed["sql"]
+
+            # Model name from query string
+            query_str = tool_args.get("query", "")
+            if "." in query_str:
+                response.model_used = query_str.split(".")[0]
+
+    except (json.JSONDecodeError, AttributeError, TypeError) as e:
+        logger.debug(f"[BSL Agent] Could not parse query result: {e}")
+
+
+def _run_agent_loop(
+    question: str,
+    bsl_tools: GATABSLTools,
+    llm: Any,
+    tenant_slug: str,
+) -> AgentResponse:
+    """Run the LLM agent loop with BSLTools.
+
+    BSLTools' execute() returns JSON strings. For query_model, the JSON
+    contains {records, chart: {data: <echarts_option>}, total_rows}.
+    We parse this to extract records and chart_spec for the response.
+    """
+    start = time.time()
+    response = AgentResponse(provider="llm")
+
+    system_prompt = _build_system_prompt(tenant_slug, bsl_tools.models)
+    lc_tools = bsl_tools.get_callable_tools()
+    llm_with_tools = llm.bind_tools(lc_tools)
+
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=question),
+    ]
+
+    max_iterations = 8
+    for i in range(max_iterations):
+        ai_message = llm_with_tools.invoke(messages)
+        messages.append(ai_message)
+
+        if not ai_message.tool_calls:
+            response.answer = ai_message.content
+            break
+
+        for tool_call in ai_message.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            response.tool_calls.append(tool_call)
+            response.tool_calls.append(f"{tool_name}({json.dumps(tool_args)})")
 
-            result = _execute_bsl_tool(
-                tool_name, tool_args, semantic_tables, tenant_slug
-            )
+            try:
+                # BSLTools.execute() returns a string (JSON for query_model)
+                result_str = bsl_tools.execute(tool_name, tool_args)
 
-            if result.get("records"):
-                response.records = result["records"]
-            if result.get("sql"):
-                response.sql = result["sql"]
-            if result.get("model"):
-                response.model_used = result["model"]
-            if result.get("error"):
-                tool_error = result["error"]
+                # Extract structured data from query_model responses
+                if tool_name == "query_model" and result_str:
+                    _extract_query_results(result_str, response, tool_args)
 
-        # Build the answer — prefer data summary over raw LLM text
-        if response.records:
-            response.answer = (
-                f"Found {len(response.records)} records from "
-                f"**{response.model_used}**."
-            )
-        elif tool_error:
-            response.answer = f"Query failed: {tool_error}"
-            response.error = tool_error
-        elif tool_calls_to_run:
-            # Tool calls were made but returned no data
-            response.answer = (
-                f"Query executed against {response.model_used or 'unknown model'} "
-                f"but returned no records."
-            )
-        elif hasattr(ai_response, 'content') and ai_response.content:
-            # No tool calls parsed — return the LLM's text as-is
-            response.answer = ai_response.content
-        else:
-            response.answer = "I processed your question but didn't find matching data."
+                messages.append(ToolMessage(
+                    content=str(result_str),
+                    tool_call_id=tool_call["id"],
+                ))
 
-    except Exception as e:
-        logger.error(f"[BSL Agent] Error: {e}", exc_info=True)
-        response.error = str(e)
-        response.answer = f"Error processing question: {e}"
+            except Exception as e:
+                logger.warning(f"[BSL Agent] Tool {tool_name} failed: {e}")
+                messages.append(ToolMessage(
+                    content=f"Error: {e}",
+                    tool_call_id=tool_call["id"],
+                ))
 
     response.execution_time_ms = int((time.time() - start) * 1000)
     return response
 
 
-def _parse_tool_call_from_text(content: str) -> Optional[dict]:
-    """
-    Parse a tool call from LLM text content.
+# ───────────────────────────────────────────────────────────
+# Keyword fallback (no LLM needed)
+# ───────────────────────────────────────────────────────────
 
-    Smaller models (e.g., qwen2.5-coder:7b) often emit tool call JSON
-    as plain text rather than using the structured tool-calling protocol.
-    This function extracts the tool name and arguments from that text.
-    """
-    if not content:
-        return None
-
-    try:
-        # Try direct JSON parse first
-        data = json.loads(content.strip())
-        if isinstance(data, dict) and "name" in data and "arguments" in data:
-            return {"name": data["name"], "args": data["arguments"]}
-    except (json.JSONDecodeError, KeyError):
-        pass
-
-    # Try extracting JSON from markdown code blocks or surrounding text
-    import re
-    json_patterns = [
-        r'```(?:json)?\s*(\{.*?\})\s*```',  # ```json { ... } ```
-        r'(\{[^{}]*"name"\s*:.*?"arguments"\s*:\s*\{.*?\}\s*\})',  # inline
-    ]
-    for pattern in json_patterns:
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                if "name" in data and "arguments" in data:
-                    return {"name": data["name"], "args": data["arguments"]}
-            except (json.JSONDecodeError, KeyError):
-                continue
-
-    return None
-
-
-def _build_bsl_tools(
-    semantic_tables: dict,
-    tenant_slug: str,
-) -> list:
-    """
-    Build LangChain-compatible tool definitions from BSL semantic tables.
-
-    These are tool schemas that the LLM uses to decide which queries to run.
-    """
-    from langchain_core.tools import tool
-
-    table_names = list(semantic_tables.keys())
-
-    @tool
-    def list_available_models() -> str:
-        """List all available semantic models with their dimensions and measures."""
-        descriptions = []
-        for name in semantic_tables:
-            descriptions.append(f"Model: {name}")
-        return "\n".join(descriptions)
-
-    @tool
-    def query_semantic_model(
-        model_name: str,
-        dimensions: list[str],
-        measures: list[str],
-        limit: int = 100,
-    ) -> str:
-        """
-        Query a semantic model by grouping dimensions and aggregating measures.
-
-        Args:
-            model_name: Name of the model to query (e.g., 'fct_tyrell_corp__ad_performance')
-            dimensions: List of dimension names to group by
-            measures: List of measure names to aggregate
-            limit: Maximum rows to return (default 100)
-        """
-        st = semantic_tables.get(model_name)
-        if st is None:
-            return f"Model '{model_name}' not found. Available: {table_names}"
-
-        try:
-            query = st
-            if dimensions:
-                query = query.group_by(*dimensions)
-            if measures:
-                query = query.aggregate(*measures)
-
-            result = query.execute()
-
-            # Convert to records
-            if hasattr(result, 'to_dict'):
-                records = result.to_dict(orient='records')
-            else:
-                records = result.to_pandas().head(limit).to_dict(orient='records')
-
-            return json.dumps(records[:limit], default=str)
-
-        except Exception as e:
-            return f"Query error: {e}"
-
-    @tool
-    def get_model_schema(model_name: str) -> str:
-        """
-        Get the schema (dimensions and measures) for a specific model.
-
-        Args:
-            model_name: Name of the model to describe
-        """
-        st = semantic_tables.get(model_name)
-        if st is None:
-            return f"Model '{model_name}' not found. Available: {table_names}"
-
-        try:
-            info = {
-                "name": model_name,
-                "type": type(st).__name__,
-                "repr": str(st),
-            }
-            return json.dumps(info, default=str)
-        except Exception as e:
-            return f"Error describing model: {e}"
-
-    return [list_available_models, query_semantic_model, get_model_schema]
-
-
-def _execute_bsl_tool(
-    tool_name: str,
-    tool_args: dict,
-    semantic_tables: dict,
-    tenant_slug: str,
-) -> dict:
-    """Execute a BSL tool call and return structured results."""
-    result = {"records": [], "sql": "", "model": "", "error": ""}
-
-    if tool_name == "query_semantic_model":
-        model_name = tool_args.get("model_name", "")
-        dimensions = tool_args.get("dimensions", [])
-        measures = tool_args.get("measures", [])
-        limit = tool_args.get("limit", 100)
-
-        st = semantic_tables.get(model_name)
-        if st is None:
-            result["error"] = f"Model '{model_name}' not found"
-            return result
-
-        result["model"] = model_name
-
-        # Filter dimensions/measures to only those that exist as
-        # registered BSL fields — prevents errors from LLM hallucination
-        valid_dims = []
-        valid_measures = []
-
-        config = _load_tenant_config(tenant_slug)
-        for mc in config.get("models", []):
-            if mc["name"] == model_name:
-                known_dims = {d["name"] for d in mc.get("dimensions", [])}
-                known_measures = {m["name"] for m in mc.get("measures", [])}
-                valid_dims = [d for d in dimensions if d in known_dims]
-                valid_measures = [m for m in measures if m in known_measures]
-
-                skipped = (
-                    set(dimensions) - known_dims
-                ) | (set(measures) - known_measures)
-                if skipped:
-                    logger.warning(
-                        f"[BSL Tool] Skipped unknown fields: {skipped}"
-                    )
-                break
-
-        if not valid_dims and not valid_measures:
-            result["error"] = (
-                f"No valid dimensions or measures for {model_name}. "
-                f"Requested dims={dimensions}, measures={measures}"
-            )
-            return result
-
-        try:
-            query = st
-            if valid_dims:
-                query = query.group_by(*valid_dims)
-            if valid_measures:
-                query = query.aggregate(*valid_measures)
-
-            # Get the compiled SQL
-            try:
-                compiled = query.compile()
-                result["sql"] = str(compiled)
-            except Exception:
-                result["sql"] = "(SQL compilation not available)"
-
-            # Execute
-            df = query.execute()
-            if hasattr(df, 'to_dict'):
-                result["records"] = df.head(limit).to_dict(orient='records')
-            else:
-                result["records"] = (
-                    df.to_pandas().head(limit).to_dict(orient='records')
-                )
-
-        except Exception as e:
-            logger.error(f"[BSL Tool] Query error: {e}")
-            result["error"] = str(e)
-
-    return result
+KEYWORD_MAP = {
+    "ad_performance": ["ad", "ads", "spend", "impression", "click", "ctr", "cpc", "cpm", "campaign spend"],
+    "orders": ["order", "revenue", "aov", "purchase", "transaction", "total_price", "sales"],
+    "sessions": ["session", "conversion", "bounce", "traffic", "attribution", "utm"],
+    "events": ["event", "pageview", "funnel", "page_view", "add_to_cart", "checkout"],
+    "users": ["user", "customer", "identity", "anonymous", "visitor", "resolved"],
+    "campaigns": ["campaign", "campaign_name", "campaign_status"],
+}
 
 
 def _fallback_keyword_search(
     question: str,
-    tenant_slug: str,
+    models: dict[str, SemanticModel],
 ) -> AgentResponse:
-    """
-    Fallback when no LLM is available.
-    Uses keyword matching to select the most relevant model,
-    then returns its data through the existing QueryBuilder.
-    """
-    start = time.time()
-    response = AgentResponse(provider="keyword_fallback")
-
-    config = _load_tenant_config(tenant_slug)
-    question_lower = question.lower()
-
-    # Keyword -> model mapping
-    model_keywords = {
-        "ad": "ad_performance",
-        "spend": "ad_performance",
-        "impression": "ad_performance",
-        "click": "ad_performance",
-        "ctr": "ad_performance",
-        "campaign": "campaigns",
-        "order": "orders",
-        "revenue": "orders",
-        "aov": "orders",
-        "purchase": "orders",
-        "session": "sessions",
-        "conversion": "sessions",
-        "bounce": "sessions",
-        "event": "events",
-        "pageview": "events",
-        "user": "users",
-        "customer": "users",
-        "identity": "users",
-    }
-
-    # Find best matching model
-    best_model = None
+    """Keyword-based model suggestion + basic query execution when no LLM."""
+    q_lower = question.lower()
+    matched_model = None
     best_score = 0
-    for keyword, model_suffix in model_keywords.items():
-        if keyword in question_lower:
-            # Find the full model name for this tenant
-            for m in config.get("models", []):
-                if model_suffix in m["name"]:
-                    score = len(keyword)
-                    if score > best_score:
-                        best_score = score
-                        best_model = m
-                        break
 
-    if best_model:
-        response.model_used = best_model["name"]
-        dims = [d["name"] for d in best_model.get("dimensions", [])]
-        measures = [m["name"] for m in best_model.get("measures", [])]
-        response.answer = (
-            f"Based on your question, the most relevant model is "
-            f"**{best_model.get('label', best_model['name'])}** "
-            f"(`{best_model['name']}`). "
-            f"Dimensions: {', '.join(dims[:5])}. "
-            f"Measures: {', '.join(measures[:5])}. "
-            f"Use the structured query endpoint to query this model, "
-            f"or install Ollama for natural language queries."
-        )
-    else:
-        available = [m["name"] for m in config.get("models", [])]
-        response.answer = (
-            f"I couldn't determine the right model for your question. "
-            f"Available models: {', '.join(available)}. "
-            f"Try being more specific, or use the structured query endpoint."
-        )
+    for model_name, keywords in KEYWORD_MAP.items():
+        score = sum(1 for kw in keywords if kw in q_lower)
+        if score > best_score and model_name in models:
+            best_score = score
+            matched_model = model_name
 
-    response.execution_time_ms = int((time.time() - start) * 1000)
-    return response
+    if not matched_model:
+        matched_model = next(iter(models), None)
 
+    if not matched_model:
+        return AgentResponse(answer="No semantic models available.", error="No models")
+
+    model = models[matched_model]
+    dims = list(model.get_dimensions().keys())
+    measures = list(model.get_measures().keys())
+
+    # Try a basic query: first dimension + first measure
+    records = []
+    chart_spec = None
+    if dims and measures:
+        try:
+            query = model.group_by(dims[0]).aggregate(measures[0])
+            df = query.execute()
+            records = df.head(50).to_dict(orient="records")
+
+            # Generate ECharts
+            try:
+                chart_result = query.chart(backend="echarts", format="json")
+                if isinstance(chart_result, str):
+                    chart_spec = json.loads(chart_result)
+                elif isinstance(chart_result, dict):
+                    chart_spec = chart_result
+            except Exception:
+                pass
+        except Exception as e:
+            logger.debug(f"[BSL Fallback] Basic query failed: {e}")
+
+    answer = (
+        f"Based on your question, here are results from **{matched_model}** "
+        f"grouped by `{dims[0]}` with `{measures[0]}` aggregated.\n\n"
+        f"_No LLM available — showing default grouping. "
+        f"Start Ollama for natural language queries._"
+    ) if records else (
+        f"Most relevant model: **{matched_model}**\n"
+        f"Dimensions: {', '.join(dims[:5])}\n"
+        f"Measures: {', '.join(measures[:5])}\n\n"
+        f"_No LLM available. Use structured query endpoint._"
+    )
+
+    return AgentResponse(
+        answer=answer,
+        records=records,
+        chart_spec=chart_spec,
+        model_used=matched_model,
+        provider="keyword_fallback",
+    )
+
+
+# ───────────────────────────────────────────────────────────
+# Public API — main entry point
+# ───────────────────────────────────────────────────────────
 
 def ask(question: str, tenant_slug: str) -> AgentResponse:
-    """
-    Main entry point for natural language analytics questions.
+    """Ask a natural language analytics question against a tenant's semantic models.
 
-    Routes to LLM agent loop if available, keyword fallback otherwise.
-    """
-    provider = get_llm_provider()
+    Routes through:
+    1. LLM agent loop (Ollama → Anthropic fallback) if available
+    2. Keyword fallback if no LLM available
 
-    if provider.is_available and provider.llm is not None:
-        return _run_bsl_agent_loop(question, tenant_slug, provider)
-    else:
-        logger.info(
-            f"[BSL Agent] No LLM available ({provider.error_message}). "
-            f"Using keyword fallback."
+    This is the function wired to POST /semantic-layer/{tenant}/ask
+    """
+    from bsl_model_builder import get_tenant_semantic_models
+    from llm_provider import get_llm_provider
+
+    start = time.time()
+
+    # Build BSL models from dbt metadata
+    try:
+        models = get_tenant_semantic_models(tenant_slug)
+    except Exception as e:
+        return AgentResponse(
+            answer=f"Failed to load semantic models for '{tenant_slug}': {e}",
+            error=str(e),
+            execution_time_ms=int((time.time() - start) * 1000),
         )
-        return _fallback_keyword_search(question, tenant_slug)
+
+    if not models:
+        return AgentResponse(
+            answer=f"No semantic models found for tenant '{tenant_slug}'.",
+            error="No models",
+        )
+
+    # Create BSLTools wrapper with pre-built models
+    bsl_tools = GATABSLTools(models=models, chart_backend="echarts")
+
+    # Try LLM agent loop
+    provider = get_llm_provider()
+    if provider.is_available and provider.llm and LANGCHAIN_AVAILABLE:
+        try:
+            response = _run_agent_loop(question, bsl_tools, provider.llm, tenant_slug)
+            response.provider = provider.provider_name
+            return response
+        except Exception as e:
+            logger.warning(f"[BSL Agent] LLM agent failed, falling back: {e}")
+
+    # Keyword fallback
+    return _fallback_keyword_search(question, models)

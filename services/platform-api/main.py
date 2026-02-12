@@ -1,3 +1,29 @@
+"""
+GATA Platform API — Semantic Layer + Observability
+
+Endpoints:
+  Semantic Layer (BSL-powered):
+    GET  /semantic-layer/{tenant}/models         — List BSL models (from dbt catalog)
+    GET  /semantic-layer/{tenant}/models/{name}   — Model detail (dims, measures)
+    GET  /semantic-layer/{tenant}/dimensions       — All dimensions (BSL live catalog)
+    GET  /semantic-layer/{tenant}/measures         — All measures (BSL live catalog)
+    POST /semantic-layer/{tenant}/query            — Structured query execution
+    POST /semantic-layer/{tenant}/ask              — Natural language query (LLM agent)
+    GET  /semantic-layer/{tenant}                  — Raw dbt catalog manifest
+    GET  /semantic-layer/{tenant}/config           — YAML config (enrichments)
+    POST /semantic-layer/update                    — Update tenant logic + trigger dbt
+
+  LLM Provider:
+    GET  /semantic-layer/llm-status                — Provider status
+    POST /semantic-layer/llm-refresh               — Force refresh
+
+  Observability:
+    GET  /observability/{tenant}/summary
+    GET  /observability/{tenant}/runs
+    GET  /observability/{tenant}/tests
+    GET  /observability/{tenant}/identity-resolution
+"""
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import duckdb
@@ -5,6 +31,7 @@ import os
 import json
 import yaml
 import subprocess
+import logging
 from pathlib import Path
 
 from models import (
@@ -15,9 +42,12 @@ from models import (
 )
 from query_builder import QueryBuilder
 from bsl_agent import ask as bsl_ask
+from bsl_model_builder import get_tenant_semantic_models, get_tenant_metadata
 from llm_provider import get_llm_provider
 
-app = FastAPI()
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="GATA Platform API", version="0.2.0")
 TENANTS_YAML = Path(__file__).parent.parent.parent / "tenants.yaml"
 
 app.add_middleware(
@@ -29,7 +59,44 @@ app.add_middleware(
 )
 
 
-# --- BSL LLM Status Endpoints (before {tenant_slug} routes to avoid path conflicts) ---
+# --- Helpers ---
+
+def _get_db_connection() -> duckdb.DuckDBPyConnection:
+    md_token = os.environ.get("MOTHERDUCK_TOKEN")
+    if md_token:
+        conn_str = f"md:my_db?motherduck_token={md_token}"
+    elif os.environ.get("GATA_ENV") == "local":
+        conn_str = str(Path(__file__).parent.parent.parent / "warehouse" / "sandbox.duckdb")
+    else:
+        conn_str = "md:my_db"
+    return duckdb.connect(conn_str)
+
+
+def _get_query_builder(tenant_slug: str) -> QueryBuilder:
+    config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
+    if not config_path.exists():
+        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+    return QueryBuilder(config)
+
+
+def _get_bsl_models(tenant_slug: str) -> dict:
+    """Get BSL SemanticModel objects for a tenant (cached)."""
+    try:
+        return get_tenant_semantic_models(tenant_slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to build BSL models for {tenant_slug}: {e}")
+        raise HTTPException(status_code=500, detail=f"BSL model build failed: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+# BSL LLM Status Endpoints (before {tenant_slug} routes)
+# ═══════════════════════════════════════════════════════════
 
 @app.get("/semantic-layer/llm-status", response_model=LLMProviderStatus)
 def get_llm_status():
@@ -56,32 +123,99 @@ def refresh_llm_provider():
     }
 
 
-# --- Helpers ---
+# ═══════════════════════════════════════════════════════════
+# BSL-Powered Semantic Layer Endpoints
+# ═══════════════════════════════════════════════════════════
 
-def _get_db_connection() -> duckdb.DuckDBPyConnection:
-    md_token = os.environ.get("MOTHERDUCK_TOKEN")
-    if md_token:
-        conn_str = f"md:my_db?motherduck_token={md_token}"
-    elif os.environ.get("GATA_ENV") == "local":
-        conn_str = str(Path(__file__).parent.parent.parent / "warehouse" / "sandbox.duckdb")
-    else:
-        conn_str = "md:my_db"
-    return duckdb.connect(conn_str)
+@app.get("/semantic-layer/{tenant_slug}/dimensions")
+def get_dimensions(tenant_slug: str):
+    """Live dimension catalog from BSL (auto-generated from dbt metadata)."""
+    models = _get_bsl_models(tenant_slug)
+    result = {}
+    for model_name, model in models.items():
+        dims = {}
+        for dim_name, dim in model.get_dimensions().items():
+            dims[dim_name] = {
+                "description": dim.description or dim_name,
+                "is_time_dimension": getattr(dim, "is_time_dimension", False),
+            }
+        result[model_name] = {
+            "description": model.description or model_name,
+            "dimensions": dims,
+        }
+    return result
 
 
-def _get_query_builder(tenant_slug: str) -> QueryBuilder:
-    config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
-    if not config_path.exists():
-        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    return QueryBuilder(config)
+@app.get("/semantic-layer/{tenant_slug}/measures")
+def get_measures(tenant_slug: str):
+    """Live measure catalog from BSL (auto-generated from dbt metadata)."""
+    models = _get_bsl_models(tenant_slug)
+    result = {}
+    for model_name, model in models.items():
+        measures = {}
+        for measure_name, measure in model.get_measures().items():
+            measures[measure_name] = {
+                "description": measure.description or measure_name,
+            }
+        result[model_name] = {
+            "description": model.description or model_name,
+            "measures": measures,
+        }
+    return result
 
 
-# --- Semantic Layer Endpoints (existing) ---
+@app.get("/semantic-layer/{tenant_slug}/catalog")
+def get_catalog(tenant_slug: str):
+    """Full semantic catalog for frontend consumption.
+
+    Returns all models with their dimensions, measures, calculated measures,
+    joins, and metadata. This replaces the static JSON files the frontend
+    previously loaded.
+    """
+    _get_bsl_models(tenant_slug)  # ensure models + metadata are built
+    metadata = get_tenant_metadata(tenant_slug)
+
+    catalog = {}
+    for model_name, model_meta in metadata.items():
+        columns = model_meta.get("columns", {})
+        dims = {
+            col_name: {
+                "type": info.get("bsl_type", "string"),
+                "is_time_dimension": info.get("is_time_dimension", False),
+            }
+            for col_name, info in columns.items()
+            if info.get("role") == "dimension"
+        }
+        measures = {
+            col_name: {
+                "type": info.get("bsl_type", "number"),
+                "agg": info.get("agg", "sum"),
+            }
+            for col_name, info in columns.items()
+            if info.get("role") == "measure"
+        }
+        catalog[model_name] = {
+            "label": model_meta.get("label", model_name),
+            "description": model_meta.get("description", ""),
+            "table": model_meta.get("table", ""),
+            "dimensions": dims,
+            "measures": measures,
+            "calculated_measures": model_meta.get("calculated_measures", []),
+            "joins": model_meta.get("joins", []),
+            "dimension_count": len(dims),
+            "measure_count": len(measures),
+            "has_joins": model_meta.get("has_joins", False),
+        }
+    return catalog
+
+
+# ═══════════════════════════════════════════════════════════
+# Raw Catalog + Config Endpoints (preserved)
+# ═══════════════════════════════════════════════════════════
 
 @app.get("/semantic-layer/{tenant_slug}")
 def get_semantic_layer(tenant_slug: str):
+    """Return raw dbt catalog manifests from platform_ops__boring_semantic_layer."""
     try:
         con = _get_db_connection()
         result = con.execute("""
@@ -100,17 +234,21 @@ def get_semantic_layer(tenant_slug: str):
 
 @app.get("/semantic-layer/{tenant_slug}/config")
 def get_semantic_config(tenant_slug: str):
-    """Returns the BSL semantic config for a tenant."""
+    """Returns the hand-written YAML semantic config for a tenant (optional override).
+
+    YAML configs are optional enrichments — tenants get full BSL functionality
+    from the auto-classified catalog even without a YAML config file.
+    """
     config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
     if not config_path.exists():
-        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
+        return {"models": [], "_note": "No YAML override config — using auto-generated catalog"}
     with open(config_path) as f:
         return yaml.safe_load(f)
 
 
 @app.post("/semantic-layer/update")
 async def update_logic(tenant_slug: str, platform: str, logic_payload: dict):
-    # 1. Update tenants.yaml
+    """Update tenant logic in tenants.yaml and trigger dbt refresh."""
     with open(TENANTS_YAML, "r") as f:
         config = yaml.safe_load(f)
 
@@ -125,37 +263,106 @@ async def update_logic(tenant_slug: str, platform: str, logic_payload: dict):
     with open(TENANTS_YAML, "w") as f:
         yaml.safe_dump(config, f)
 
-    # 2. Trigger dbt refresh
     try:
         project_root = Path(__file__).parent.parent.parent
         dbt_cwd = project_root / "warehouse" / "gata_transformation"
         subprocess.run(["dbt", "run", "--select", "platform"], check=True, cwd=dbt_cwd)
+
+        # Invalidate BSL model + metadata caches after dbt run
+        from bsl_model_builder import _tenant_cache, _tenant_metadata_cache
+        _tenant_cache.pop(tenant_slug, None)
+        _tenant_metadata_cache.pop(tenant_slug, None)
+
         return {"status": "success", "message": f"Logic updated for {tenant_slug}"}
     except subprocess.CalledProcessError:
         raise HTTPException(status_code=500, detail="dbt execution failed")
 
 
-# --- Model Discovery Endpoints ---
+# ═══════════════════════════════════════════════════════════
+# Model Discovery Endpoints (metadata-driven from dbt catalog)
+# ═══════════════════════════════════════════════════════════
 
 @app.get("/semantic-layer/{tenant_slug}/models", response_model=list[ModelSummary])
 def list_models(tenant_slug: str):
-    qb = _get_query_builder(tenant_slug)
-    return qb.list_models()
+    """List available semantic models (auto-discovered from dbt catalog).
+
+    Uses metadata (from platform_ops__bsl_column_catalog) for accurate counts.
+    Calculated measures are not included in measure_count.
+    """
+    models = _get_bsl_models(tenant_slug)
+    metadata = get_tenant_metadata(tenant_slug)
+    result = []
+    for name, model in models.items():
+        meta = metadata.get(name, {})
+        columns = meta.get("columns", {})
+        dim_count = sum(1 for c in columns.values() if c.get("role") == "dimension")
+        measure_count = sum(1 for c in columns.values() if c.get("role") == "measure")
+        result.append(ModelSummary(
+            name=name,
+            label=meta.get("label", model.description or name),
+            description=meta.get("description", f"Semantic model: {name}"),
+            dimension_count=dim_count,
+            measure_count=measure_count,
+            has_joins=meta.get("has_joins", False),
+        ))
+    return result
 
 
 @app.get("/semantic-layer/{tenant_slug}/models/{model_name}", response_model=ModelDetail)
 def get_model_detail(tenant_slug: str, model_name: str):
-    qb = _get_query_builder(tenant_slug)
-    try:
-        return qb.get_model_detail(model_name)
-    except ValueError:
+    """Get detailed schema for a specific model.
+
+    Returns enriched metadata: dimensions with types, measures with aggs,
+    auto-inferred calculated measures, and auto-inferred joins.
+    """
+    models = _get_bsl_models(tenant_slug)
+    if model_name not in models:
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
 
+    metadata = get_tenant_metadata(tenant_slug)
+    model_meta = metadata.get(model_name, {})
+    columns = model_meta.get("columns", {})
 
-# --- Query Execution Endpoint ---
+    # Build dimensions from metadata (accurate types)
+    dims = [
+        {
+            "name": col_name,
+            "type": info.get("bsl_type", "string"),
+            "is_time_dimension": info.get("is_time_dimension", False),
+        }
+        for col_name, info in columns.items()
+        if info.get("role") == "dimension"
+    ]
+
+    # Build measures from metadata (accurate aggs)
+    measures = [
+        {
+            "name": col_name,
+            "type": info.get("bsl_type", "number"),
+            "agg": info.get("agg", "sum"),
+        }
+        for col_name, info in columns.items()
+        if info.get("role") == "measure"
+    ]
+
+    return ModelDetail(
+        name=model_name,
+        label=model_meta.get("label", model_name),
+        description=model_meta.get("description", ""),
+        dimensions=dims,
+        measures=measures,
+        calculated_measures=model_meta.get("calculated_measures", []),
+        joins=model_meta.get("joins", []),
+    )
+
+
+# ═══════════════════════════════════════════════════════════
+# Query Execution (structured — preserved)
+# ═══════════════════════════════════════════════════════════
 
 @app.post("/semantic-layer/{tenant_slug}/query", response_model=SemanticQueryResponse)
 def execute_query(tenant_slug: str, request: SemanticQueryRequest):
+    """Execute a structured semantic query via the QueryBuilder."""
     qb = _get_query_builder(tenant_slug)
     try:
         sql, params = qb.build_query(tenant_slug, request)
@@ -174,7 +381,32 @@ def execute_query(tenant_slug: str, request: SemanticQueryRequest):
         raise HTTPException(status_code=500, detail=f"Query execution error: {e}")
 
 
-# --- Observability Endpoints ---
+# ═══════════════════════════════════════════════════════════
+# BSL Natural Language Agent Endpoint
+# ═══════════════════════════════════════════════════════════
+
+@app.post("/semantic-layer/{tenant_slug}/ask", response_model=AskResponse)
+def ask_question(tenant_slug: str, request: AskRequest):
+    """Ask a natural language analytics question.
+
+    Routes through BSL agent with Ollama LLM if available,
+    falls back to keyword-based model suggestion otherwise.
+    """
+    # Validate tenant exists in BSL catalog
+    _get_bsl_models(tenant_slug)
+
+    result = bsl_ask(request.question, tenant_slug)
+
+    # Trim records to max_records
+    if len(result.records) > request.max_records:
+        result.records = result.records[:request.max_records]
+
+    return AskResponse(**result.to_dict())
+
+
+# ═══════════════════════════════════════════════════════════
+# Observability Endpoints (unchanged)
+# ═══════════════════════════════════════════════════════════
 
 @app.get("/observability/{tenant_slug}/summary", response_model=ObservabilitySummary)
 def get_observability_summary(tenant_slug: str):
@@ -307,26 +539,3 @@ def get_identity_resolution(tenant_slug: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# --- BSL Natural Language Agent Endpoints ---
-
-@app.post("/semantic-layer/{tenant_slug}/ask", response_model=AskResponse)
-def ask_question(tenant_slug: str, request: AskRequest):
-    """
-    Ask a natural language analytics question.
-
-    Routes through BSL agent with Ollama LLM if available,
-    falls back to keyword-based model suggestion otherwise.
-    """
-    config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
-    if not config_path.exists():
-        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
-
-    result = bsl_ask(request.question, tenant_slug)
-
-    # Trim records to max_records
-    if len(result.records) > request.max_records:
-        result.records = result.records[:request.max_records]
-
-    return AskResponse(**result.to_dict())
