@@ -154,3 +154,15 @@ tenants:
         enabled: true
       google_ads:
         enabled: true
+  - slug: gata_swamp
+    business_name: GATA SWAMP
+    status: onboarding
+    sources:
+      shopify:
+        enabled: true
+      google_analytics:
+        enabled: true
+      facebook_ads:
+        enabled: true
+      google_ads:
+        enabled: true

@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='gata_swamp', source_name='shopify', schema_hash='b0cccc0dfecd54b4d78978152b86a2a3', master_model_id='shopify_api_v1_orders', source_table='raw_gata_swamp_shopify_orders') }}

@@ -1,0 +1,1 @@
+{{ build_dim_users('gata_swamp') }}

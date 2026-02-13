@@ -1,0 +1,1 @@
+{{ build_dim_campaigns('gata_swamp') }}

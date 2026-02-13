@@ -1,55 +1,88 @@
-name: "gata_transformation"
-version: "1.0.0"
+name: gata_transformation
+version: 1.0.0
 config-version: 2
-
 vars:
-  dlt_load_id: "manual_run"
+  dlt_load_id: manual_run
   tenant_configs:
     tenants:
-      - slug: tyrell_corp
-        sources:
-          facebook_ads: {enabled: true}
-          google_ads: {enabled: true}
-          instagram_ads: {enabled: true}
-          shopify: {enabled: true}
-          google_analytics: {enabled: true, logic: {conversion_events: ["purchase"]}}
-      - slug: wayne_enterprises
-        sources:
-          bing_ads: {enabled: true}
-          google_ads: {enabled: true}
-          bigcommerce: {enabled: true}
-          google_analytics: {enabled: true, logic: {conversion_events: ["purchase"]}}
-      - slug: stark_industries
-        sources:
-          facebook_ads: {enabled: true}
-          instagram_ads: {enabled: true}
-          woocommerce: {enabled: true}
-          mixpanel: {enabled: true, logic: {conversion_events: ["purchase"]}}
-
-require-dbt-version: ">=1.8.0"
-
-profile: "swamp-duck"
-
-model-paths: ["models"]
-analysis-paths: ["analyses"]
-test-paths: ["tests"]
-seed-paths: ["seeds"]
-macro-paths: ["macros"]
-snapshot-paths: ["snapshots"]
-
-target-path: "target"
+    - slug: tyrell_corp
+      sources:
+        facebook_ads:
+          enabled: true
+        google_ads:
+          enabled: true
+        instagram_ads:
+          enabled: true
+        shopify:
+          enabled: true
+        google_analytics:
+          enabled: true
+          logic:
+            conversion_events:
+            - purchase
+    - slug: wayne_enterprises
+      sources:
+        bing_ads:
+          enabled: true
+        google_ads:
+          enabled: true
+        bigcommerce:
+          enabled: true
+        google_analytics:
+          enabled: true
+          logic:
+            conversion_events:
+            - purchase
+    - slug: stark_industries
+      sources:
+        facebook_ads:
+          enabled: true
+        instagram_ads:
+          enabled: true
+        woocommerce:
+          enabled: true
+        mixpanel:
+          enabled: true
+          logic:
+            conversion_events:
+            - purchase
+    - slug: gata_swamp
+      sources:
+        facebook_ads:
+          enabled: true
+        google_ads:
+          enabled: true
+        shopify:
+          enabled: true
+        google_analytics:
+          enabled: true
+          logic:
+            conversion_events:
+            - purchase
+require-dbt-version: '>=1.8.0'
+profile: swamp-duck
+model-paths:
+- models
+analysis-paths:
+- analyses
+test-paths:
+- tests
+seed-paths:
+- seeds
+macro-paths:
+- macros
+snapshot-paths:
+- snapshots
+target-path: target
 clean-targets:
-  - "target"
-  - "dbt_packages"
-
+- target
+- dbt_packages
 on-run-start:
-  - "{{ init_artifact_tables() }}"
-
+- '{{ init_artifact_tables() }}'
 on-run-end:
-  - "{{ upload_run_results() }}"
-  - "{{ upload_model_definitions() }}"
-  - "{{ upload_test_definitions() }}"
-
+- '{{ upload_run_results() }}'
+- '{{ upload_model_definitions() }}'
+- '{{ upload_test_definitions() }}'
 models:
   gata_transformation:
     sources:
@@ -60,10 +93,12 @@ models:
       +materialized: table
     analytics:
       +materialized: table
-      +tags: ["reporting"]
+      +tags:
+      - reporting
     platform:
       +materialized: table
       master_models:
         +materialized: incremental
         +full_refresh: false
-        +tags: ['master_model']
+        +tags:
+        - master_model
