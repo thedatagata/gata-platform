@@ -36,10 +36,7 @@ export const handler: Handlers = {
       // Don't send password hashes to client
       const sanitizedUsers = users.map(user => ({
         username: user.username,
-        plan_tier: user.plan_tier,
-        preferred_model_tier: user.preferred_model_tier,
-        ai_addon_unlocked: user.ai_addon_unlocked,
-        ai_analyst_unlocked: user.ai_analyst_unlocked,
+        tenant_slug: user.tenant_slug,
         createdAt: user.createdAt,
       }));
 

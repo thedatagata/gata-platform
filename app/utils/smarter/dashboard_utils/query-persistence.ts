@@ -1,6 +1,4 @@
 // utils/smarter/dashboard_utils/query-persistence.ts
-import { getLDClient } from "../../launchdarkly/client.ts";
-import { trackInteraction } from "../../launchdarkly/events.ts";
 import type { ChartConfig } from "../autovisualization_dashboard/chart-generator.ts";
 
 export interface PinnedItem {
@@ -24,32 +22,22 @@ export type SavedQuery = PinnedItem & {
 };
 
 const INDEXED_DB_NAME = "gata_analytical_persistence";
-const INDEXED_DB_VERSION = 2; // Bump version for new schema
+const INDEXED_DB_VERSION = 2;
 const STORE_NAME = "pinned_items";
 
 /**
- * Save a pinned item to storage (session or IndexedDB based on flag)
+ * Save a pinned item to IndexedDB
  */
 export async function savePinnedItem(item: PinnedItem): Promise<boolean> {
-  const client = getLDClient();
-  const canPersist = client?.variation("smarter-query-persistence", false);
-  
-  if (canPersist) {
+  try {
     await saveToIndexedDB(item);
-    
-    trackInteraction("click", "pin_item", "dashboard", "QueryPersistence", {
-      plan: "smarter",
-      storageType: "indexeddb",
-      tableName: item.tableName
-    });
-    
     return true;
-  } else {
-    // Session storage fallback for non-premium
+  } catch {
+    // Fallback to session storage
     const key = `pins_${item.tableName}`;
     const items = JSON.parse(sessionStorage.getItem(key) || "[]");
     items.push(item);
-    sessionStorage.setItem(key, JSON.stringify(items.slice(-10))); // Limit session-only storage
+    sessionStorage.setItem(key, JSON.stringify(items.slice(-10)));
     return false;
   }
 }
@@ -58,13 +46,10 @@ export async function savePinnedItem(item: PinnedItem): Promise<boolean> {
  * Load all pinned items for a table
  */
 export async function loadPinnedItems(tableName: string): Promise<PinnedItem[]> {
-  const client = getLDClient();
-  const canPersist = client?.variation("smarter-query-persistence", false);
-  
-  if (canPersist) {
+  try {
     const all = await loadFromIndexedDB();
     return all.filter(item => item.tableName === tableName);
-  } else {
+  } catch {
     return JSON.parse(sessionStorage.getItem(`pins_${tableName}`) || "[]");
   }
 }
@@ -73,12 +58,9 @@ export async function loadPinnedItems(tableName: string): Promise<PinnedItem[]> 
  * Delete a pinned item
  */
 export async function deletePinnedItem(itemId: string, tableName: string): Promise<void> {
-  const client = getLDClient();
-  const canPersist = client?.variation("smarter-query-persistence", false);
-  
-  if (canPersist) {
+  try {
     await deleteFromIndexedDB(itemId);
-  } else {
+  } catch {
     const key = `pins_${tableName}`;
     const items = JSON.parse(sessionStorage.getItem(key) || "[]");
     const filtered = items.filter((i: PinnedItem) => i.id !== itemId);
@@ -90,14 +72,10 @@ export async function deletePinnedItem(itemId: string, tableName: string): Promi
  * Compatibility wrapper for loading all queries
  */
 export async function loadQueries(): Promise<SavedQuery[]> {
-  const client = getLDClient();
-  const canPersist = client?.variation("smarter-query-persistence", false);
-  
   let items: PinnedItem[] = [];
-  if (canPersist) {
+  try {
     items = await loadFromIndexedDB();
-  } else {
-    // Collect from all keys in session storage that match the pattern
+  } catch {
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
       if (key?.startsWith("pins_")) {
@@ -120,13 +98,9 @@ export async function loadQueries(): Promise<SavedQuery[]> {
  * Compatibility wrapper for deleting a query by ID only
  */
 export async function deleteQuery(itemId: string): Promise<void> {
-  const client = getLDClient();
-  const canPersist = client?.variation("smarter-query-persistence", false);
-  
-  if (canPersist) {
+  try {
     await deleteFromIndexedDB(itemId);
-  } else {
-    // Search and remove from all session storage bins
+  } catch {
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
       if (key?.startsWith("pins_")) {
@@ -147,9 +121,8 @@ export async function clearAllQueries(): Promise<void> {
     const transaction = db.transaction([STORE_NAME], "readwrite");
     const store = transaction.objectStore(STORE_NAME);
     const request = store.clear();
-    
+
     request.onsuccess = () => {
-      // Also clear session storage bins
       for (let i = sessionStorage.length - 1; i >= 0; i--) {
         const key = sessionStorage.key(i);
         if (key?.startsWith("pins_")) {
@@ -168,10 +141,10 @@ export async function clearAllQueries(): Promise<void> {
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(INDEXED_DB_NAME, INDEXED_DB_VERSION);
-    
+
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
-    
+
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {

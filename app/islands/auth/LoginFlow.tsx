@@ -2,7 +2,13 @@ import { useState } from "preact/hooks";
 
 export default function LoginFlow() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [credentials, setCredentials] = useState({ username: '', password: '', email: '' });
+  const [credentials, setCredentials] = useState({ 
+    username: '', 
+    password: '', 
+    email: '',
+    companyName: '',
+    tenantSlug: '' 
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +32,13 @@ export default function LoginFlow() {
         throw new Error(data.error || `${mode === 'login' ? 'Login' : 'Signup'} failed`);
       }
 
-      // Redirect to dashboard on success
-      globalThis.location.href = '/app/dashboard';
+      // Redirect logic
+      if (mode === 'signup') {
+         // Pass tenant details to onboarding
+         globalThis.location.href = `/app/onboarding?tenant=${credentials.tenantSlug}&company=${encodeURIComponent(credentials.companyName)}`;
+      } else {
+         globalThis.location.href = '/app/dashboard';
+      }
 
     } catch (err) {
       setError((err as Error).message);
@@ -41,7 +52,7 @@ export default function LoginFlow() {
   };
 
   return (
-    <div class="min-h-screen bg-[#050805] flex items-center justify-center p-6 relative overflow-hidden">
+    <div class="min-h-screen bg-gata-dark flex items-center justify-center p-6 relative overflow-hidden">
       {/* Animated Background Elements */}
       <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-gata-green/10 rounded-full blur-[120px] animate-pulse" />
       <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-gata-green/5 rounded-full blur-[120px] animate-pulse" style="animation-delay: 2s" />
@@ -72,17 +83,39 @@ export default function LoginFlow() {
 
           <form onSubmit={handleSubmit} class="space-y-4">
             {mode === 'signup' && (
-              <div>
-                <label class="block text-[10px] font-black text-gata-green uppercase tracking-[0.2em] mb-2 ml-1">Email Address</label>
-                <input 
-                  type="email" 
-                  required 
-                  value={credentials.email}
-                  placeholder="alex@company.com"
-                  onInput={(e) => setCredentials({...credentials, email: (e.target as HTMLInputElement).value})}
-                  class="w-full px-5 py-4 bg-gata-dark/40 border border-gata-green/10 rounded-2xl text-gata-cream placeholder:text-gata-cream/20 focus:border-gata-green/40 focus:bg-gata-dark/60 outline-none transition-all duration-300"
-                />
-              </div>
+              <>
+                <div>
+                  <label class="block text-[10px] font-black text-gata-green uppercase tracking-[0.2em] mb-2 ml-1">Company Name</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={credentials.companyName}
+                    placeholder="Tyrell Corporation"
+                    onInput={(e) => {
+                      const val = (e.target as HTMLInputElement).value;
+                      const slug = val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                      setCredentials({...credentials, companyName: val, tenantSlug: slug});
+                    }}
+                    class="w-full px-5 py-4 bg-gata-dark/40 border border-gata-green/10 rounded-2xl text-gata-cream placeholder:text-gata-cream/20 focus:border-gata-green/40 focus:bg-gata-dark/60 outline-none transition-all duration-300"
+                  />
+                  {credentials.tenantSlug && (
+                     <div class="mt-1 ml-1 text-[9px] text-gata-cream/30 font-mono">
+                       Tenant ID: <span class="text-gata-green">{credentials.tenantSlug}</span>
+                     </div>
+                  )}
+                </div>
+                <div>
+                  <label class="block text-[10px] font-black text-gata-green uppercase tracking-[0.2em] mb-2 ml-1">Email Address</label>
+                  <input 
+                    type="email" 
+                    required 
+                    value={credentials.email}
+                    placeholder="alex@company.com"
+                    onInput={(e) => setCredentials({...credentials, email: (e.target as HTMLInputElement).value})}
+                    class="w-full px-5 py-4 bg-gata-dark/40 border border-gata-green/10 rounded-2xl text-gata-cream placeholder:text-gata-cream/20 focus:border-gata-green/40 focus:bg-gata-dark/60 outline-none transition-all duration-300"
+                  />
+                </div>
+              </>
             )}
             <div>
               <label class="block text-[10px] font-black text-gata-green uppercase tracking-[0.2em] mb-2 ml-1">Username</label>

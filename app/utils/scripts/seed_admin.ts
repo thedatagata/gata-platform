@@ -38,10 +38,6 @@ export default async function seedAdmin() {
     const updatedUser = {
       ...existing,
       passwordHash: hash,
-      plan_tier: "premium" as const,
-      ai_addon_unlocked: true,
-      ai_analyst_unlocked: true,
-      preferred_model_tier: "7b" as const,
       updatedAt: new Date()
     };
     
@@ -52,14 +48,7 @@ export default async function seedAdmin() {
 
   console.log("Creating admin user...");
   
-  await createUser(
-    adminEmail,
-    hash,
-    "premium", // Give admin premium access
-    true,      // Unlock AI
-    true,      // Unlock Analyst
-    "7b"       // Give admin the powerful model
-  );
+  await createUser(adminEmail, { passwordHash: hash });
 
   console.log(` Admin user created!`);
   console.log(`Username: ${adminEmail}`);

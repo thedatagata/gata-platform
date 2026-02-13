@@ -42,8 +42,6 @@ export const handler: Handlers = {
           authenticated: true,
           user: {
             username: user.username,
-            plan_tier: user.plan_tier,
-            ai_addon_unlocked: user.ai_addon_unlocked,
           },
         }),
         {

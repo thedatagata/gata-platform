@@ -2,6 +2,7 @@
 import { PageProps } from "$fresh/server.ts";
 import { Head } from "$fresh/runtime.ts";
 import ScrollToTop from "../islands/app_utils/ScrollToTop.tsx";
+import ToastContainer from "../islands/app_utils/Toast.tsx";
 
 export default function App({ Component }: PageProps) {
   return (
@@ -15,12 +16,12 @@ export default function App({ Component }: PageProps) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
         <link rel="stylesheet" href="/gata_app_utils/styles.css" />
       </Head>
-      <div class="font-sans bg-[#F8F6F0] min-h-screen flex flex-col">
+      <div class="font-sans bg-gata-cream min-h-screen flex flex-col">
         <Component />
         <ScrollToTop />
+        <ToastContainer />
       </div>
     </>
   );

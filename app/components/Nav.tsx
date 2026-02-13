@@ -23,7 +23,7 @@ export default function Nav() {
              <a href="#experience" class="text-[10px] font-black text-gata-cream/60 uppercase tracking-[0.3em] hover:text-gata-green transition-colors">Experience</a>
              <a href="https://linkedin.com/in/yalenewman" target="_blank" class="text-[10px] font-black text-gata-cream/60 uppercase tracking-[0.3em] hover:text-gata-green transition-colors">LinkedIn</a>
              <a
-              href="/auth/signin"
+              href="/demo"
               class="px-8 py-3 bg-gata-green text-gata-dark rounded-full text-[10px] font-black uppercase tracking-[0.3em] hover:bg-[#a0d147] transition-all transform hover:-translate-y-0.5 shadow-lg shadow-gata-green/20"
             >
               Launch Demo
@@ -33,7 +33,7 @@ export default function Nav() {
           {/* Mobile Menu Toggle (Simplified) */}
           <div class="md:hidden">
             <a
-              href="/auth/signin"
+              href="/demo"
               class="px-5 py-2.5 bg-gata-green text-gata-dark rounded-full text-[10px] font-black uppercase tracking-[0.2em]"
             >
               Demo

@@ -1,9 +1,4 @@
-
-interface HeroFeatureProps {
-  _ldClientId?: string;
-}
-
-export default function HeroFeature({ _ldClientId }: HeroFeatureProps) {
+export default function HeroFeature() {
   return (
     <section class="relative min-h-screen bg-gata-dark overflow-hidden">
       {/* Background with Swamp Image */}
@@ -70,10 +65,10 @@ export default function HeroFeature({ _ldClientId }: HeroFeatureProps) {
 
             <div class="flex flex-wrap gap-4 pt-6">
               <a
-                href="/auth/signin"
+                href="/demo"
                 class="px-8 py-4 bg-gata-green text-gata-dark rounded-full text-sm font-black uppercase tracking-[0.2em] hover:bg-[#a0d147] transition-all transform hover:-translate-y-1 shadow-[0_20px_40px_rgba(144,193,55,0.3)]"
               >
-                Launch App Experience
+                Launch Live Demo
               </a>
               <a
                 href="#experience"

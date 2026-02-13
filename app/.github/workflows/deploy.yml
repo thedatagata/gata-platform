@@ -20,17 +20,6 @@ jobs:
         with:
           deno-version: v2.x
 
-
-
-      - name: Verify LaunchDarkly Flags
-        # This simple check ensures we don't deploy code referencing missing flags
-        run: |
-          echo " Scanning for flag usage..."
-          # Search for FLAGS. usage in the codebase
-          grep -r "FLAGS\." . --include="*.tsx" --include="*.ts" || true
-          
-          echo " Flag references found. (In a real enterprise setup, we would validate these against the LD API)"
-
   deploy:
     needs: test
     runs-on: ubuntu-latest
@@ -41,45 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create LaunchDarkly deployment event
-        # Only run if LD token is present
-        if: env.LAUNCHDARKLY_ACCESS_TOKEN != ''
-        run: |
-          curl -X POST https://app.launchdarkly.com/api/v2/engineering-insights/deployments \
-            -H "Authorization: ${{ secrets.LAUNCHDARKLY_ACCESS_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "application": {
-                "key": "thedenogatar",
-                "name": "TheDenogatar"
-              },
-              "version": "${{ github.sha }}",
-              "environment": "${{ env.DENO_ENV }}",
-              "startedAt": "'$(date -u +%s%3N)'",
-              "metadata": {
-                "branch": "${{ github.ref_name }}",
-                "commit": "${{ github.sha }}",
-                "author": "${{ github.actor }}"
-              }
-            }'
-        env:
-          LAUNCHDARKLY_ACCESS_TOKEN: ${{ secrets.LAUNCHDARKLY_ACCESS_TOKEN }}
-
       - name: Trigger Render Deploy
         if: success()
         run: |
-          # Trigger Render to build and deploy the latest commit
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-
-      - name: Update LaunchDarkly deployment status
-        if: always() && env.LAUNCHDARKLY_ACCESS_TOKEN != ''
-        run: |
-          curl -X PATCH "https://app.launchdarkly.com/api/v2/engineering-insights/deployments/${{ env.DENO_ENV }}/thedenogatar/${{ github.sha }}" \
-            -H "Authorization: ${{ secrets.LAUNCHDARKLY_ACCESS_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "status": "${{ job.status == 'success' && 'succeeded' || 'failed' }}",
-              "endedAt": "'$(date -u +%s%3N)'"
-            }'
-        env:
-          LAUNCHDARKLY_ACCESS_TOKEN: ${{ secrets.LAUNCHDARKLY_ACCESS_TOKEN }}

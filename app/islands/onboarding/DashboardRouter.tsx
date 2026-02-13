@@ -1,58 +1,37 @@
 // islands/onboarding/DashboardRouter.tsx
-import { useState, useEffect } from "preact/hooks";
+import { useState } from "preact/hooks";
 import SmartDashLoadingPage from "../dashboard/smarter_dashboard/SmartDashLoadingPage.tsx";
-import FileUploader from "../app_utils/FileUploader.tsx";
-import SemanticProfiler from "../app_utils/SemanticProfiler.tsx";
 import { SemanticLayer } from "../../utils/system/semantic-profiler.ts";
-import { getLDClient, initializeLaunchDarkly } from "../../utils/launchdarkly/client.ts";
-import ExperienceGateway from "../../islands/onboarding/ExperienceGateway.tsx";
 import CustomDataDashboard from "../dashboard/smarter_dashboard/CustomDataDashboard.tsx";
 import DashboardSeeder, { SeedingInfo } from "../../islands/onboarding/DashboardSeeder.tsx";
 import { registerCustomMetadata, getSemanticMetadata, type SemanticMetadata } from "../../utils/smarter/dashboard_utils/semantic-config.ts";
-import { SemanticReportObj } from "../../utils/smarter/dashboard_utils/semantic-objects.ts";
 import { createPlatformAPIClient, type ModelSummary } from "../../utils/api/platform-api-client.ts";
 import { adaptBSLModelToSemanticMetadata } from "../../utils/api/bsl-config-adapter.ts";
 import PipelineHealthDashboard from "../dashboard/observability/PipelineHealthDashboard.tsx";
+import { showToast } from "../app_utils/Toast.tsx";
 
 interface DashboardRouterProps {
   motherDuckToken: string;
   sessionId: string;
-  ldClientId?: string;
   tenantSlug?: string;
 }
 
-export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId, tenantSlug }: DashboardRouterProps) {
-  const [smarterMode, setSmarterMode] = useState<'sample' | 'custom' | 'connected' | null>(null);
+export default function DashboardRouter({ motherDuckToken, sessionId, tenantSlug }: DashboardRouterProps) {
   const [smartDashInitialized, setSmartDashInitialized] = useState(false);
   // deno-lint-ignore no-explicit-any
   const [db, setDb] = useState<any>(null);
   // deno-lint-ignore no-explicit-any
   const [webllmEngine, setWebllmEngine] = useState<any>(null);
 
-  const [sourceSelection, setSourceSelection] = useState<'upload' | null>(null);
-
   const [activeTable, setActiveTable] = useState<string | null>(null);
   const [activeConfig, setActiveConfig] = useState<SemanticLayer | SemanticMetadata | null>(null);
   const [seedingInfo, setSeedingInfo] = useState<SeedingInfo | null>(null);
-  const [isProfiling, setIsProfiling] = useState(false);
-  const [ldInitialized, setLdInitialized] = useState(!!getLDClient());
 
   // Connected mode state
   const [availableModels, setAvailableModels] = useState<ModelSummary[]>([]);
   const [connectedLoading, setConnectedLoading] = useState(false);
+  const [connectedError, setConnectedError] = useState<string | null>(null);
   const [showObservability, setShowObservability] = useState(false);
-
-  useEffect(() => {
-    const initLD = async () => {
-      let client = getLDClient();
-      if (!client && ldClientId) {
-        const context = { kind: "user", key: sessionId, name: sessionId };
-        client = await initializeLaunchDarkly(context, ldClientId);
-      }
-      if (client) setLdInitialized(true);
-    };
-    initLD();
-  }, [ldClientId, sessionId]);
 
   const handleSmartDashReady = (dbConnection: unknown, engine: unknown) => {
     setDb(dbConnection);
@@ -60,18 +39,25 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
     setSmartDashInitialized(true);
   };
 
-  // 1. GATEWAY: Choose Sample vs Custom vs Connected
-  if (!smarterMode) {
+  // No tenant configured — show message
+  if (!tenantSlug) {
     return (
-      <ExperienceGateway
-        onSelect={(mode) => setSmarterMode(mode)}
-        tenantSlug={tenantSlug}
-      />
+      <div class="min-h-screen flex items-center justify-center bg-gata-dark">
+        <div class="text-center space-y-6 max-w-md">
+          <h2 class="text-2xl font-black text-gata-cream uppercase tracking-tight">No Tenant Configured</h2>
+          <p class="text-gata-cream/40 text-sm leading-relaxed">
+            Complete onboarding to connect your data sources and start exploring your analytics.
+          </p>
+          <a href="/" class="inline-block px-8 py-3 bg-gata-green text-gata-dark rounded-xl font-black uppercase tracking-widest text-xs hover:bg-[#a0d147] transition-all">
+            Back to Home
+          </a>
+        </div>
+      </div>
     );
   }
 
-  // CONNECTED MODE: Observability view
-  if (smarterMode === 'connected' && showObservability && tenantSlug) {
+  // Observability view
+  if (showObservability) {
     return (
       <PipelineHealthDashboard
         tenantSlug={tenantSlug}
@@ -80,18 +66,53 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
     );
   }
 
-  // CONNECTED MODE: Model selection (before DuckDB/WebLLM initialization)
-  if (smarterMode === 'connected' && !activeTable && tenantSlug) {
-    if (availableModels.length === 0 && !connectedLoading) {
+  // Model selection (before DuckDB/WebLLM initialization)
+  if (!activeTable) {
+    if (availableModels.length === 0 && !connectedLoading && !connectedError) {
       setConnectedLoading(true);
       const client = createPlatformAPIClient();
       client.getModels(tenantSlug).then(models => {
         setAvailableModels(models);
         setConnectedLoading(false);
+        setConnectedError(null);
       }).catch(err => {
         console.error("Failed to load models:", err);
         setConnectedLoading(false);
+        setConnectedError((err as Error).message || "Failed to connect to analytics backend");
       });
+    }
+
+    if (connectedError) {
+      return (
+        <div class="min-h-screen flex items-center justify-center p-4 bg-gata-dark">
+          <div class="max-w-lg w-full text-center space-y-8">
+            <div class="w-20 h-20 mx-auto rounded-full border-2 border-red-400/30 flex items-center justify-center">
+              <svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-2xl font-black text-gata-cream uppercase tracking-tight mb-2">Backend Unavailable</h2>
+              <p class="text-gata-cream/40 text-sm leading-relaxed">{connectedError}</p>
+            </div>
+            <div class="flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={() => { setConnectedError(null); setConnectedLoading(false); }}
+                class="px-8 py-3 bg-gata-green text-gata-dark rounded-xl font-black uppercase tracking-widest text-xs hover:bg-[#a0d147] transition-all"
+              >
+                Retry Connection
+              </button>
+              <a
+                href="/"
+                class="px-8 py-3 border border-gata-green/20 text-gata-cream/60 rounded-xl font-bold uppercase tracking-widest text-xs hover:text-gata-green hover:border-gata-green transition-all text-center"
+              >
+                Back to Home
+              </a>
+            </div>
+          </div>
+        </div>
+      );
     }
 
     if (connectedLoading) {
@@ -119,13 +140,17 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
                 type="button"
                 key={model.name}
                 onClick={async () => {
-                  const client = createPlatformAPIClient();
-                  const detail = await client.getModelDetail(tenantSlug!, model.name);
-                  const metadata = adaptBSLModelToSemanticMetadata(detail);
-                  registerCustomMetadata(metadata);
-                  setActiveTable(model.name);
-                  setActiveConfig(metadata);
-                  setIsProfiling(false);
+                  try {
+                    const client = createPlatformAPIClient();
+                    const detail = await client.getModelDetail(tenantSlug, model.name);
+                    const metadata = adaptBSLModelToSemanticMetadata(detail);
+                    registerCustomMetadata(metadata);
+                    setActiveTable(model.name);
+                    setActiveConfig(metadata);
+                  } catch (err) {
+                    showToast(`Failed to load ${model.label}`, 'error');
+                    setConnectedError(`Failed to load ${model.label}: ${(err as Error).message}`);
+                  }
                 }}
                 class="bg-gata-dark border-2 border-gata-green/10 hover:border-gata-green hover:translate-y-[-4px] p-8 rounded-2xl transition-all text-left group"
               >
@@ -147,118 +172,25 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
             >
               Pipeline Health
             </button>
-            <button type="button" onClick={() => setSmarterMode(null)} class="text-gata-cream/20 hover:text-gata-green text-xs transition-colors uppercase font-bold tracking-widest">
-              ← Back
-            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // 2. LOADER: Initialize DuckDB & WebLLM (for sample/custom modes)
-  if (!smartDashInitialized && smarterMode !== 'connected') {
-    return <SmartDashLoadingPage onComplete={handleSmartDashReady} motherDuckToken={motherDuckToken} mode={smarterMode === 'connected' ? 'custom' : smarterMode} />;
-  }
-
-  if (!ldInitialized && smarterMode !== 'connected') {
-    return <div class="min-h-screen flex items-center justify-center bg-gata-dark text-gata-green font-mono">INITIALIZING ANALYTICAL KERNEL...</div>;
-  }
-
-  // 3. SOURCE SELECTION / UPLOAD / CLOUD (sample/custom only)
-  if (!activeTable) {
-    if (smarterMode === 'custom') {
-
-      if (sourceSelection === 'upload') {
-        return (
-          <div class="min-h-screen flex items-center justify-center p-4 bg-gata-dark">
-            <div class="max-w-4xl w-full">
-              <div class="bg-gata-dark border-2 border-gata-green/30 rounded-3xl p-12 shadow-2xl space-y-8">
-                <div class="text-center">
-                  <h2 class="text-5xl font-black text-gata-cream italic tracking-tighter mb-4">DRAG. DROP. <span class="text-gata-green">PROFIT.</span></h2>
-                  <p class="text-gata-cream/40 font-medium">Upload any CSV, Parquet, or JSON to start your AI analysis.</p>
-                </div>
-                <FileUploader
-                  db={db}
-                  onUploadComplete={(tableName: string) => { setActiveTable(tableName); setIsProfiling(true); }}
-                />
-                <button type="button" onClick={() => setSourceSelection(null)} class="text-gata-cream/20 hover:text-gata-green text-xs w-full transition-colors uppercase font-bold tracking-widest">← Back to Selection</button>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div class="min-h-screen flex items-center justify-center p-4 bg-gata-dark">
-          <div class="max-w-4xl w-full text-center space-y-12">
-            <h2 class="text-6xl font-black text-gata-cream italic tracking-tighter uppercase mb-4">Select Source</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <button
-                type="button"
-                onClick={() => setSourceSelection('upload')}
-                class="bg-gata-dark border-4 border-gata-green/10 hover:border-gata-green hover:translate-y-[-8px] p-12 rounded-3xl transition-all group"
-              >
-                <div class="text-5xl mb-6"></div>
-                <div class="text-2xl font-black text-gata-cream uppercase tracking-tight">Local Upload</div>
-                <p class="text-xs text-gata-cream/40 mt-4 font-medium italic">CSV, Parquet, JSON from your machine.</p>
-              </button>
-            </div>
-            <button type="button" onClick={() => setSmarterMode(null)} class="text-gata-cream/20 hover:text-gata-green text-xs transition-colors uppercase font-bold tracking-widest">← Back to Gateway</button>
-          </div>
-        </div>
-      );
-    } else {
-      // Sample selection
-      return (
-        <div class="min-h-screen flex items-center justify-center p-4 bg-gata-dark">
-          <div class="max-w-3xl w-full text-center space-y-12">
-            <h2 class="text-6xl font-black text-gata-cream italic tracking-tighter uppercase underline decoration-gata-green decoration-8 underline-offset-8">Select Dataset</h2>
-            <div class="grid grid-cols-2 gap-8 px-4">
-               <button type="button" onClick={() => { setActiveTable('session_facts'); setIsProfiling(true); }} class="bg-gata-dark border-4 border-gata-green/10 hover:border-gata-green hover:translate-y-[-8px] p-10 rounded-3xl transition-all group relative overflow-hidden">
-                  <span class="text-5xl block mb-6 group-hover:scale-110 transition-transform"></span>
-                  <span class="text-2xl font-black text-gata-cream uppercase tracking-tight">Product Analytics</span>
-                  <p class="text-xs text-gata-cream/40 mt-4 leading-relaxed font-medium">Real-time session events, conversion funnels, and user pathing datasets.</p>
-               </button>
-               <button type="button" onClick={() => { setActiveTable('users_dim'); setIsProfiling(true); }} class="bg-gata-dark border-4 border-gata-green/10 hover:border-gata-green hover:translate-y-[-8px] p-10 rounded-3xl transition-all group relative overflow-hidden">
-                  <span class="text-5xl block mb-6 group-hover:scale-110 transition-transform"></span>
-                  <span class="text-2xl font-black text-gata-cream uppercase tracking-tight">Growth Data</span>
-                  <p class="text-xs text-gata-cream/40 mt-4 leading-relaxed font-medium">User retention, engagement scoring, and demographic breakdown data.</p>
-               </button>
-            </div>
-            <button type="button" onClick={() => setSmarterMode(null)} class="text-gata-cream/20 hover:text-gata-green text-xs transition-colors uppercase font-bold tracking-widest">← Back to Choice</button>
-          </div>
-        </div>
-      );
-    }
-  }
-
-  // 4. SEMANTIC PROFILING: Validate/Create Dimensions & Measures (sample/custom only)
-  if (isProfiling && activeTable) {
+  // Initialize DuckDB & WebLLM
+  if (!smartDashInitialized) {
     return (
-      <div class="min-h-screen bg-gata-dark py-12 px-4 shadow-inner">
-        <div class="max-w-6xl mx-auto">
-          <SemanticProfiler
-            db={db}
-            tableName={activeTable}
-            webllmEngine={webllmEngine}
-            onComplete={(config: SemanticLayer) => {
-              registerCustomMetadata(config);
-              if (webllmEngine) {
-                const engine = webllmEngine as { registerTable: (tableName: string, report: SemanticReportObj) => void };
-                engine.registerTable(config.table, new SemanticReportObj(db, config.table));
-              }
-              setActiveConfig(config);
-              setIsProfiling(false);
-            }}
-            onCancel={() => { setActiveTable(null); setIsProfiling(false); }}
-          />
-        </div>
-      </div>
+      <SmartDashLoadingPage
+        onComplete={handleSmartDashReady}
+        motherDuckToken={motherDuckToken}
+        mode="connected"
+        tenantSlug={tenantSlug}
+      />
     );
   }
 
-  // 5. BASELINE SEEDING
+  // Baseline seeding
   if (!seedingInfo && activeTable && activeConfig) {
     return (
       <div class="min-h-screen flex items-center justify-center p-4 bg-gata-dark">
@@ -277,7 +209,7 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
     );
   }
 
-  // 6. GENERALIZED SMARTER WORKSPACE
+  // Dashboard workspace
   if (seedingInfo && activeTable && activeConfig) {
     return (
       <div class="min-h-screen bg-gata-darker">
@@ -289,7 +221,8 @@ export default function DashboardRouter({ motherDuckToken, sessionId, ldClientId
             semanticConfig={activeConfig}
             seedingInfo={seedingInfo}
             onBack={() => { setSeedingInfo(null); }}
-            onShowObservability={smarterMode === 'connected' && tenantSlug ? () => setShowObservability(true) : undefined}
+            onShowObservability={() => setShowObservability(true)}
+            tenantSlug={tenantSlug}
           />
         </div>
       </div>

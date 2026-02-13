@@ -9,6 +9,7 @@ import {
   getSemanticMetadata, 
   sanitizeValue 
 } from "../../../utils/smarter/dashboard_utils/semantic-config.ts";
+import { createPlatformAPIClient } from "../../../utils/api/platform-api-client.ts";
 import { SeedingInfo } from "../../onboarding/DashboardSeeder.tsx";
 import FreshChartsWrapper from "../../../components/charts/FreshChartsWrapper.tsx";
 import KPICard from "../../../components/charts/KPICard.tsx";
@@ -25,6 +26,7 @@ interface CustomDataDashboardProps {
   seedingInfo?: SeedingInfo;
   onBack: () => void;
   onShowObservability?: () => void;
+  tenantSlug?: string;
 }
 
 export default function CustomDataDashboard({
@@ -35,6 +37,7 @@ export default function CustomDataDashboard({
   seedingInfo,
   onBack,
   onShowObservability,
+  tenantSlug,
 }: CustomDataDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [showCatalog, setShowCatalog] = useState(false);
@@ -185,27 +188,83 @@ export default function CustomDataDashboard({
     initializeDashboard();
   }, [tableName, semanticConfig, webllmEngine, seedingInfo, db]);
 
+  // ... inside CustomDataDashboard component ...
+
   const handleGenerateSQL = async () => {
     if (!promptInput.trim() || !webllmEngine) return;
     setSqlGenerating(true);
     setLastError(null);
     setGeneratedChart(null);
     setKpiResult(null);
-    
+    setGeneratedSQL(""); // Clear previous
+    setSqlExplanation("");
+
     try {
-      const handler = webllmEngine as { 
-        generateQuery: (prompt: string, table: string, context?: PinnedItem[]) => Promise<{ query: { sql: string, explanation: string } }> 
-      };
-      const { query } = await handler.generateQuery(promptInput, tableName, pinnedItems);
-      
-      setGeneratedSQL(query.sql);
-      setEditedSQL(query.sql);
-      setSqlExplanation(query.explanation);
-      
-      // Auto-execute the generated query
-      await executeSQL(query.sql, promptInput);
+      // --- HYBRID FLOW: CONNECTED MODE ---
+      // If we have a tenantSlug, we utilize the Backend BSL Agent
+      if ((window as any).tenantSlug || tenantSlug) { 
+         const slug = tenantSlug || (window as any).tenantSlug;
+         
+         // PASS 1: Local LLM Planning (Text -> JSON)
+         console.log("[Hybrid] Pass 1: Generating Semantic Request locally...");
+         const handler = webllmEngine as { 
+           generateSemanticRequest: (prompt: string, model: string, context?: PinnedItem[]) => Promise<any> 
+         };
+         
+         const semanticRequest = await handler.generateSemanticRequest(promptInput, tableName, pinnedItems);
+         console.log("[Hybrid] Pass 1 Result:", semanticRequest);
+         setGeneratedSQL(JSON.stringify(semanticRequest, null, 2));
+         setSqlExplanation("Generated Semantic Intent (BSL Protocol)");
+
+         // PASS 2: Backend Execution (JSON -> SQL -> Data)
+         console.log("[Hybrid] Pass 2: Executing via Platform API...");
+         const client = createPlatformAPIClient();
+         const result = await client.executeQuery(slug, semanticRequest);
+         
+         // Render Results
+         const rows = result.data;
+         
+         // Heuristic for Chart Title
+         const title = semanticRequest.measures?.[0] ? `${semanticRequest.measures[0]} Analysis` : 'Query Result';
+         
+         // KPI Check
+         const isKPI = rows.length === 1 && Object.keys(rows[0]).length === 1;
+         if (isKPI && rows.length > 0) {
+             const key = Object.keys(rows[0])[0];
+             setKpiResult({
+               value: Number(rows[0][key]),
+               title: key.replace(/_/g, ' ').toUpperCase()
+             });
+         } else if (rows.length > 0) {
+             const chartConfig = generateDashboardChartConfig(
+               {
+                 dimensions: semanticRequest.dimensions || [],
+                 measures: semanticRequest.measures || [],
+                 chartType: 'bar', // default, generator will refine
+                 title: title
+               },
+               rows
+             );
+             if (chartConfig) setGeneratedChart(chartConfig);
+         }
+         
+      } else {
+        // --- LOCAL MODE: DUCKDB WASM ---
+        const handler = webllmEngine as { 
+             generateQuery: (prompt: string, table: string, context?: PinnedItem[]) => Promise<{ query: { sql: string, explanation: string } }> 
+        };
+        const { query } = await handler.generateQuery(promptInput, tableName, pinnedItems);
+           
+        setGeneratedSQL(query.sql);
+        setEditedSQL(query.sql);
+        setSqlExplanation(query.explanation);
+           
+        // Auto-execute the generated query
+        await executeSQL(query.sql, promptInput);
+      }
+
     } catch (error: unknown) {
-      console.error("AI SQL Generation failed:", error);
+      console.error("AI Generation failed:", error);
       setLastError(error instanceof Error ? error.message : String(error));
     } finally {
       setSqlGenerating(false);
@@ -258,10 +317,35 @@ export default function CustomDataDashboard({
   };
 
   const handleManualExecute = async () => {
+    // If it looks like JSON, we assume it's a semantic request for backend
+    // If it looks like SQL, it's local
     if (!editedSQL.trim()) return;
     setSqlGenerating(true);
     setLastError(null);
-    await executeSQL(editedSQL, "Custom Result");
+
+    // Hybrid Check for Manual Override
+    if (editedSQL.trim().startsWith('{') && (tenantSlug || (window as any).tenantSlug)) {
+        const slug = tenantSlug || (window as any).tenantSlug;
+        try {
+            const req = JSON.parse(editedSQL);
+            const client = createPlatformAPIClient();
+            const result = await client.executeQuery(slug, req);
+            // Render logic (duped for now, could refactor)
+            const rows = result.data;
+             const isKPI = rows.length === 1 && Object.keys(rows[0]).length === 1;
+             if (isKPI && rows.length > 0) {
+                 const key = Object.keys(rows[0])[0];
+                 setKpiResult({ value: Number(rows[0][key]), title: key });
+             } else if (rows.length > 0) {
+                 const chartConfig = generateDashboardChartConfig({ dimensions: req.dimensions||[], measures: req.measures||[], chartType: 'bar', title: 'Manual Query' }, rows);
+                 if (chartConfig) setGeneratedChart(chartConfig);
+             }
+        } catch (e) {
+            setLastError("Invalid JSON for Backend Request or API Error");
+        }
+    } else {
+        await executeSQL(editedSQL, "Custom Result");
+    }
     setSqlGenerating(false);
   };
 

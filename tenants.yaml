@@ -1,12 +1,12 @@
 tenants:
   - slug: tyrell_corp
-    business_name: "Tyrell Corporation"
+    business_name: Tyrell Corporation
     status: onboarding
     sources:
       facebook_ads:
         enabled: true
         generation:
-          daily_spend_mean: 3000.0
+          daily_spend_mean: 3000
           campaign_count: 5
         tables:
           - name: ads
@@ -17,12 +17,12 @@ tenants:
             logic: {}
           - name: facebook_insights
             logic:
-              conversion_event_pattern: "purchase" # Moved from source-level logic
+              conversion_event_pattern: purchase
       google_ads:
         enabled: true
         generation:
-          daily_spend_mean: 5000.0
-          cpc_mean: 2.10
+          daily_spend_mean: 5000
+          cpc_mean: 2.1
           campaign_count: 5
         tables:
           - name: ads
@@ -38,7 +38,7 @@ tenants:
       instagram_ads:
         enabled: true
         generation:
-          daily_spend_mean: 2000.0
+          daily_spend_mean: 2000
           campaign_count: 5
         tables:
           - name: ads
@@ -49,7 +49,7 @@ tenants:
             logic: {}
           - name: facebook_insights
             logic:
-              conversion_event_pattern: "purchase"
+              conversion_event_pattern: purchase
       shopify:
         enabled: true
         generation:
@@ -67,26 +67,28 @@ tenants:
         tables:
           - name: events
             logic:
-              conversion_events: ["purchase"]
+              conversion_events:
+                - purchase
               funnel_steps:
-                session_start: "session_start"
-                view_item: "view_item"
-                add_to_cart: "add_to_cart"
-                begin_checkout: "begin_checkout"
-                purchase: "purchase"
-
+                session_start: session_start
+                view_item: view_item
+                add_to_cart: add_to_cart
+                begin_checkout: begin_checkout
+                purchase: purchase
   - slug: wayne_enterprises
-    business_name: "Wayne Enterprises"
+    business_name: Wayne Enterprises
     status: onboarding
     sources:
       bing_ads:
         enabled: true
         generation:
           campaign_count: 5
-          daily_spend_mean: 300.0
+          daily_spend_mean: 300
         tables:
           - name: account_performance_report
-            logic: { goal: "lead_gen", target_cpa: 45.0 }
+            logic:
+              goal: lead_gen
+              target_cpa: 45
       google_ads:
         enabled: true
       bigcommerce:
@@ -100,9 +102,8 @@ tenants:
             logic: {}
       google_analytics:
         enabled: true
-
   - slug: stark_industries
-    business_name: "Stark Industries"
+    business_name: Stark Industries
     status: onboarding
     sources:
       facebook_ads:
@@ -111,7 +112,8 @@ tenants:
           campaign_count: 8
         tables:
           - name: facebook_insights
-            logic: { attribution_model: "last_click" }
+            logic:
+              attribution_model: last_click
       instagram_ads:
         enabled: true
       woocommerce:
@@ -128,3 +130,27 @@ tenants:
             logic: {}
           - name: people
             logic: {}
+  - slug: demo_tenant
+    business_name: Demo Company
+    status: onboarding
+    sources:
+      shopify:
+        enabled: true
+      google_analytics:
+        enabled: true
+      facebook_ads:
+        enabled: true
+      google_ads:
+        enabled: true
+  - slug: yale_like_yale
+    business_name: Yale Like Yale
+    status: onboarding
+    sources:
+      shopify:
+        enabled: true
+      google_analytics:
+        enabled: true
+      facebook_ads:
+        enabled: true
+      google_ads:
+        enabled: true

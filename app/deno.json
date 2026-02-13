@@ -7,10 +7,6 @@
   "imports": {
     "$fresh/": "https://deno.land/x/fresh@1.7.3/",
     "$fresh_charts/": "https://deno.land/x/fresh_charts@0.3.1/",
-    "@launchdarkly/js-client-sdk": "npm:@launchdarkly/js-client-sdk@^0.9.0",
-    "@launchdarkly/node-server-sdk": "npm:@launchdarkly/node-server-sdk@^9.10.2",
-    "@launchdarkly/observability-node": "npm:@launchdarkly/observability-node@^0.3.1",
-    "@launchdarkly/server-sdk-ai": "npm:@launchdarkly/server-sdk-ai@^0.14.1",
     "chart.js": "npm:chart.js@^4.4.1",
     "chartjs-chart-funnel": "npm:chartjs-chart-funnel@^4.1.2",
     "@mlc-ai/web-llm": "npm:@mlc-ai/web-llm@0.2.79",
@@ -18,7 +14,6 @@
     "apache-arrow": "npm:apache-arrow@^14.0.0",
     "@motherduck/wasm-client": "npm:@motherduck/wasm-client@^0.8.1",
     "isoformat": "https://esm.sh/isoformat@0.2.1",
-    "launchdarkly-js-client-sdk": "npm:launchdarkly-js-client-sdk@^3.9.0",
     "preact": "https://esm.sh/preact@10.22.0",
     "preact/": "https://esm.sh/preact@10.22.0/",
     "preact/jsx-runtime": "https://esm.sh/preact@10.22.0/jsx-runtime",
