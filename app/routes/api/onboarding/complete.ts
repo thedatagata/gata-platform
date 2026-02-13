@@ -66,34 +66,21 @@ export const handler: Handlers = {
         }
       }
 
-      // 5. Trigger onboarding script asynchronously
+      // 5. Trigger onboarding script asynchronously (includes dbt runs)
       const scriptPath = resolve(Deno.cwd(), "../scripts/onboard_tenant.py");
-      
-      const command = new Deno.Command("python", {
-        args: [scriptPath, tenant_slug],
+
+      const command = new Deno.Command("uv", {
+        args: ["run", "python", scriptPath, tenant_slug, "--target", "dev", "--days", "30"],
         stdout: "inherit",
         stderr: "inherit",
       });
 
-      // Fire and forget (or await if fast, but user said 'asynchronously' and '202 Accepted')
-      // Note: awaiting command.spawn() just starts it. 
-      // await command.output() waits for it.
-      // We will spawn and NOT await output to allow instant response, 
-      // BUT Fresh handlers might kill background tasks if not careful? 
-      // Deno mostly keeps running. 
-      // However, usually better to await if we want to ensure it started?
-      // User said "trigger... asynchronously and return a 202".
-      // We'll spawn it.
-      
+      // Fire-and-forget: the script generates scaffolding then runs dbt.
+      // The frontend polls the readiness endpoint to know when it's done.
       const process = command.spawn();
-      
-      // We don't await process.status in the response path to return early.
-      // But we should probably catch errors?
-      // For truly async, we just let it run.
-      // To prevent Deno from exiting if this was a script, we typically await. 
-      // Here it's a server.
+
       process.status.then((status) => {
-         console.log(`Onboarding script for ${tenant_slug} exited with code ${status.code}`);
+        console.log(`[ONBOARD] Pipeline for ${tenant_slug} exited with code ${status.code}`);
       });
 
       return new Response(

@@ -1,11 +1,11 @@
 // islands/onboarding/DashboardRouter.tsx
-import { useState } from "preact/hooks";
+import { useState, useEffect, useRef, useCallback } from "preact/hooks";
 import SmartDashLoadingPage from "../dashboard/smarter_dashboard/SmartDashLoadingPage.tsx";
 import { SemanticLayer } from "../../utils/system/semantic-profiler.ts";
 import CustomDataDashboard from "../dashboard/smarter_dashboard/CustomDataDashboard.tsx";
 import DashboardSeeder, { SeedingInfo } from "../../islands/onboarding/DashboardSeeder.tsx";
 import { registerCustomMetadata, getSemanticMetadata, type SemanticMetadata } from "../../utils/smarter/dashboard_utils/semantic-config.ts";
-import { createPlatformAPIClient, type ModelSummary } from "../../utils/api/platform-api-client.ts";
+import { createPlatformAPIClient, type ModelSummary, type ReadinessStatus } from "../../utils/api/platform-api-client.ts";
 import { adaptBSLModelToSemanticMetadata } from "../../utils/api/bsl-config-adapter.ts";
 import PipelineHealthDashboard from "../dashboard/observability/PipelineHealthDashboard.tsx";
 import { showToast } from "../app_utils/Toast.tsx";
@@ -33,11 +33,55 @@ export default function DashboardRouter({ motherDuckToken, sessionId, tenantSlug
   const [connectedError, setConnectedError] = useState<string | null>(null);
   const [showObservability, setShowObservability] = useState(false);
 
+  // Provisioning state (pipeline still building)
+  const [isProvisioning, setIsProvisioning] = useState(false);
+  const [provisioningStatus, setProvisioningStatus] = useState<ReadinessStatus | null>(null);
+
   const handleSmartDashReady = (dbConnection: unknown, engine: unknown) => {
     setDb(dbConnection);
     setWebllmEngine(engine);
     setSmartDashInitialized(true);
   };
+
+  // Provisioning readiness polling (hooks must be before any early returns)
+  const pollRef = useRef<number | null>(null);
+  const delayRef = useRef(2000);
+
+  const retryModelLoad = useCallback(() => {
+    setIsProvisioning(false);
+    setProvisioningStatus(null);
+    setConnectedLoading(false);
+    setConnectedError(null);
+    setAvailableModels([]);
+    delayRef.current = 2000;
+  }, []);
+
+  useEffect(() => {
+    if (!isProvisioning || !tenantSlug) return;
+
+    const client = createPlatformAPIClient();
+
+    const poll = async () => {
+      try {
+        const status = await client.checkReadiness(tenantSlug);
+        setProvisioningStatus(status);
+
+        if (status.is_ready) {
+          retryModelLoad();
+          return;
+        }
+      } catch (e) {
+        console.error("Provisioning poll error:", e);
+      }
+      delayRef.current = Math.min(delayRef.current * 1.5, 15000);
+      pollRef.current = setTimeout(poll, delayRef.current) as unknown as number;
+    };
+
+    poll();
+    return () => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
+  }, [isProvisioning, tenantSlug, retryModelLoad]);
 
   // No tenant configured — show message
   if (!tenantSlug) {
@@ -68,7 +112,7 @@ export default function DashboardRouter({ motherDuckToken, sessionId, tenantSlug
 
   // Model selection (before DuckDB/WebLLM initialization)
   if (!activeTable) {
-    if (availableModels.length === 0 && !connectedLoading && !connectedError) {
+    if (availableModels.length === 0 && !connectedLoading && !connectedError && !isProvisioning) {
       setConnectedLoading(true);
       const client = createPlatformAPIClient();
       client.getModels(tenantSlug).then(models => {
@@ -77,9 +121,76 @@ export default function DashboardRouter({ motherDuckToken, sessionId, tenantSlug
         setConnectedError(null);
       }).catch(err => {
         console.error("Failed to load models:", err);
+        const msg = (err as Error).message || "";
         setConnectedLoading(false);
-        setConnectedError((err as Error).message || "Failed to connect to analytics backend");
+        // Detect pipeline-not-ready vs actual backend failure
+        if (msg.includes("No star schema tables") || msg.includes("Run dbt first") || msg.includes("bsl_column_catalog")) {
+          setIsProvisioning(true);
+        } else {
+          setConnectedError(msg || "Failed to connect to analytics backend");
+        }
       });
+    }
+
+    // Provisioning animation — pipeline is building star schema
+    if (isProvisioning) {
+      const statusLabel = provisioningStatus?.status || "starting";
+      const statusMessages: Record<string, { label: string; progress: number }> = {
+        starting:   { label: "Generating mock data...", progress: 10 },
+        ingesting:  { label: "Ingesting raw data...", progress: 25 },
+        modeling:   { label: "Building star schema...", progress: 50 },
+        cataloging: { label: "Indexing semantic layer...", progress: 75 },
+        error:      { label: "Pipeline error — retrying...", progress: 0 },
+      };
+      const { label: stepLabel, progress } = statusMessages[statusLabel] || statusMessages.starting;
+
+      return (
+        <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gata-dark to-[#186018]">
+          <div class="max-w-md w-full text-center space-y-8">
+            <div>
+              <h4 class="text-[10px] font-black text-gata-green uppercase tracking-[0.4em] mb-4">Provisioning</h4>
+              <h2 class="text-3xl font-black text-gata-cream italic tracking-tighter uppercase">Building Your Analytics</h2>
+              <p class="text-gata-cream/40 font-medium mt-3 text-sm">
+                Your data pipeline is being configured. This typically takes 2-3 minutes.
+              </p>
+            </div>
+
+            <div class="bg-gata-dark/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-gata-green/20">
+              <div class="flex justify-center mb-6">
+                <div class="relative">
+                  <div class="w-20 h-20 border-4 border-gata-green/30 rounded-full" />
+                  <div class="w-20 h-20 border-4 border-gata-green rounded-full border-t-transparent animate-spin absolute top-0" />
+                </div>
+              </div>
+
+              <p class="text-lg font-medium text-gata-cream mb-1">{stepLabel}</p>
+              <p class="text-sm text-gata-cream/50 mb-4">
+                {provisioningStatus?.message || "Waiting for pipeline..."}
+              </p>
+
+              <div class="mb-2">
+                <div class="flex justify-between text-xs text-gata-cream/70 mb-2">
+                  <span>Progress</span>
+                  <span>{progress}%</span>
+                </div>
+                <div class="w-full bg-gata-dark/60 rounded-full h-3 overflow-hidden border border-gata-green/30">
+                  <div
+                    class="h-3 bg-gradient-to-r from-gata-green to-[#a0d147] rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <a
+              href="/"
+              class="inline-block px-8 py-3 border border-gata-green/20 text-gata-cream/60 rounded-xl font-bold uppercase tracking-widest text-xs hover:text-gata-green hover:border-gata-green transition-all"
+            >
+              Back to Home
+            </a>
+          </div>
+        </div>
+      );
     }
 
     if (connectedError) {
