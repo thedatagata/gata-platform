@@ -38,7 +38,7 @@ from models import (
     SemanticQueryRequest, SemanticQueryResponse, ColumnInfo,
     ModelSummary, ModelDetail,
     ObservabilitySummary, RunResult, TestResult, IdentityResolutionStats,
-    AskRequest, AskResponse, LLMProviderStatus,
+    AskRequest, AskResponse, LLMProviderStatus, ReadinessStatus,
 )
 from query_builder import QueryBuilder
 from bsl_agent import ask as bsl_ask
@@ -92,6 +92,115 @@ def _get_bsl_models(tenant_slug: str) -> dict:
     except Exception as e:
         logger.error(f"Failed to build BSL models for {tenant_slug}: {e}")
         raise HTTPException(status_code=500, detail=f"BSL model build failed: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Readiness Endpoint (tenant pipeline status)
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/readiness/{tenant_slug}", response_model=ReadinessStatus)
+def check_readiness(tenant_slug: str):
+    """Check if a tenant's data pipeline is ready for querying.
+
+    Infers pipeline state from warehouse data:
+      - ready:      BSL column catalog has rows for tenant
+      - cataloging: boring_semantic_layer has rows but catalog not yet
+      - modeling:   tenant exists in tenants.yaml, dbt still running
+      - ingesting:  tenant exists, data landing in progress
+      - starting:   tenant just registered
+      - error:      something went wrong
+    """
+    try:
+        con = _get_db_connection()
+
+        # Check BSL column catalog (last to materialize = fully ready)
+        try:
+            bsl_count = con.execute(
+                "SELECT COUNT(*) FROM main.platform_ops__bsl_column_catalog WHERE tenant_slug = ?",
+                [tenant_slug],
+            ).fetchone()[0]
+        except duckdb.Error:
+            bsl_count = 0
+
+        if bsl_count > 0:
+            # Pipeline complete — get a load_id from semantic layer
+            load_id = None
+            try:
+                row = con.execute(
+                    "SELECT table_name FROM main.platform_ops__boring_semantic_layer WHERE tenant_slug = ? LIMIT 1",
+                    [tenant_slug],
+                ).fetchone()
+                if row:
+                    load_id = row[0]  # use table_name as reference marker
+            except duckdb.Error:
+                pass
+            con.close()
+            return ReadinessStatus(
+                is_ready=True,
+                last_load_id=load_id,
+                status="ready",
+                message=f"Pipeline complete — {bsl_count} columns cataloged",
+            )
+
+        # Check boring semantic layer (analytics tables exist but catalog not yet populated)
+        try:
+            bsl_rows = con.execute(
+                "SELECT COUNT(*) FROM main.platform_ops__boring_semantic_layer WHERE tenant_slug = ?",
+                [tenant_slug],
+            ).fetchone()[0]
+        except duckdb.Error:
+            bsl_rows = 0
+
+        if bsl_rows > 0:
+            con.close()
+            return ReadinessStatus(
+                is_ready=False,
+                status="cataloging",
+                message="Indexing semantic layer...",
+            )
+
+        con.close()
+
+        # Check tenants.yaml to determine if tenant is registered
+        if TENANTS_YAML.exists():
+            with open(TENANTS_YAML) as f:
+                tenants_cfg = yaml.safe_load(f) or {}
+            for t in tenants_cfg.get("tenants", []):
+                if t.get("slug") == tenant_slug:
+                    tenant_status = t.get("status", "unknown")
+                    if tenant_status == "onboarding":
+                        return ReadinessStatus(
+                            is_ready=False,
+                            status="modeling",
+                            message="Building star schema...",
+                        )
+                    elif tenant_status == "active":
+                        # Active but no catalog data — might need a dbt run
+                        return ReadinessStatus(
+                            is_ready=False,
+                            status="cataloging",
+                            message="Refreshing catalog...",
+                        )
+                    else:
+                        return ReadinessStatus(
+                            is_ready=False,
+                            status="starting",
+                            message="Initializing pipeline...",
+                        )
+
+        # Tenant not found at all
+        return ReadinessStatus(
+            is_ready=False,
+            status="error",
+            message=f"Tenant '{tenant_slug}' not found",
+        )
+    except Exception as e:
+        logger.error(f"Readiness check failed for {tenant_slug}: {e}")
+        return ReadinessStatus(
+            is_ready=False,
+            status="error",
+            message=str(e),
+        )
 
 
 # ═══════════════════════════════════════════════════════════

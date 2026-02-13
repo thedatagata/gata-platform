@@ -1,0 +1,1 @@
+{{ build_dim_users('yale_like_yale') }}

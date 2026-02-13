@@ -1,0 +1,1 @@
+{{ build_dim_campaigns('yale_like_yale') }}

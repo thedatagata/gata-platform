@@ -1,0 +1,10 @@
+sources:
+- database: my_db
+  name: yale_like_yale_facebook_ads
+  schema: yale_like_yale
+  tables:
+  - name: raw_yale_like_yale_facebook_ads_facebook_insights
+  - name: raw_yale_like_yale_facebook_ads_ads
+  - name: raw_yale_like_yale_facebook_ads_ad_sets
+  - name: raw_yale_like_yale_facebook_ads_campaigns
+version: 2

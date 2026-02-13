@@ -1,0 +1,1 @@
+{{ build_fct_ad_performance('yale_like_yale') }}

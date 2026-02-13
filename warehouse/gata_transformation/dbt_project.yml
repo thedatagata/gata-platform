@@ -59,6 +59,19 @@ vars:
           logic:
             conversion_events:
             - purchase
+    - slug: yale_like_yale
+      sources:
+        facebook_ads:
+          enabled: true
+        google_ads:
+          enabled: true
+        shopify:
+          enabled: true
+        google_analytics:
+          enabled: true
+          logic:
+            conversion_events:
+            - purchase
 require-dbt-version: '>=1.8.0'
 profile: swamp-duck
 model-paths:

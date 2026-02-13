@@ -149,3 +149,12 @@ class LLMProviderStatus(BaseModel):
     model: str = ""
     is_available: bool = False
     error: str = ""
+
+
+class ReadinessStatus(BaseModel):
+    """Tenant pipeline readiness status."""
+    is_ready: bool
+    last_load_id: str | None = None
+    status: Literal['starting', 'ingesting', 'modeling', 'cataloging', 'ready', 'error']
+    message: str | None = None
+    last_dbt_status: str | None = None
