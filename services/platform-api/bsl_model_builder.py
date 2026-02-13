@@ -65,6 +65,8 @@ MEASURE_NAME_PATTERNS = {
 DIMENSION_NAME_PATTERNS = {
     "_id", "_key", "_slug", "_name", "_status", "_type", "_category",
     "_email", "_source", "_medium", "_campaign", "_country", "_device",
+    # Epoch timestamp patterns (BIGINT columns that represent time)
+    "_start", "_end", "_ts", "_at", "_timestamp", "_date",
 }
 
 # Columns to always skip (internal/partition columns)
@@ -121,6 +123,18 @@ def _classify_column(col_name: str, data_type: str) -> str:
 
     # Unknown type → dimension (safe default, won't break queries)
     return "dimension"
+
+
+# Suffixes that indicate a BIGINT column is an epoch timestamp (dimension, not measure)
+_EPOCH_TIMESTAMP_SUFFIXES = ("_start", "_end", "_ts", "_at", "_timestamp", "_date")
+
+
+def _is_epoch_timestamp(col_name: str, data_type: str) -> bool:
+    """Check if a BIGINT/INTEGER column is an epoch timestamp."""
+    if data_type not in INTEGER_TYPES:
+        return False
+    col_lower = col_name.lower()
+    return any(col_lower.endswith(suffix) for suffix in _EPOCH_TIMESTAMP_SUFFIXES)
 
 
 def _infer_aggregation(col_name: str, data_type: str) -> str:
@@ -349,7 +363,8 @@ def _read_enriched_catalog(con: ibis.BaseBackend, tenant_slug: str) -> list[dict
                     col["inferred_agg"] = _infer_aggregation(col_name, data_type)
                 else:
                     col["inferred_agg"] = None
-                col["is_time_dimension"] = data_type in ("DATE", "TIMESTAMP")
+                is_epoch = _is_epoch_timestamp(col_name, data_type)
+                col["is_time_dimension"] = data_type in ("DATE", "TIMESTAMP") or is_epoch
                 # bsl_type mapping
                 if data_type in ("VARCHAR", "TEXT"):
                     col["bsl_type"] = "string"
@@ -359,6 +374,8 @@ def _read_enriched_catalog(con: ibis.BaseBackend, tenant_slug: str) -> list[dict
                     col["bsl_type"] = "timestamp"
                 elif data_type in ("BOOLEAN", "BOOL"):
                     col["bsl_type"] = "boolean"
+                elif is_epoch:
+                    col["bsl_type"] = "timestamp_epoch"
                 else:
                     col["bsl_type"] = "number"
             # Filter out skipped columns
@@ -386,6 +403,17 @@ def _read_enriched_catalog(con: ibis.BaseBackend, tenant_slug: str) -> list[dict
             "is_time_dimension": bool(is_time),
             "inferred_agg": agg,
         })
+
+    # Post-process: reclassify epoch timestamps that the SQL model may have
+    # incorrectly classified as measures (applies until dbt model is re-run)
+    for entry in tables.values():
+        for col in entry["columns"]:
+            if _is_epoch_timestamp(col["column_name"], col["data_type"]):
+                if col["semantic_role"] == "measure":
+                    col["semantic_role"] = "dimension"
+                    col["bsl_type"] = "timestamp_epoch"
+                    col["is_time_dimension"] = True
+                    col["inferred_agg"] = None
 
     return list(tables.values())
 
@@ -646,7 +674,7 @@ def _generate_bsl_config(
 
             # --- Auto-classified ---
             if role == "dimension":
-                if data_type in ("DATE", "TIMESTAMP"):
+                if data_type in ("DATE", "TIMESTAMP") or _is_epoch_timestamp(col_name, data_type):
                     model_config["dimensions"][col_name] = {
                         "expr": f"_.{col_name}",
                         "is_time_dimension": True,

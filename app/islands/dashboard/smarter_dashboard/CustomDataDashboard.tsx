@@ -31,8 +31,9 @@ export default function CustomDataDashboard({
   onBack,
   onShowObservability,
 }: CustomDataDashboardProps) {
-  // Model selection
-  const [selectedModelName, setSelectedModelName] = useState<string>(models[0]?.name || "");
+  // Model selection — prefer a model with measures for initial PoP cards
+  const defaultModel = models.find(m => m.measure_count > 0)?.name || models[0]?.name || "";
+  const [selectedModelName, setSelectedModelName] = useState<string>(defaultModel);
   const [modelDetail, setModelDetail] = useState<ModelDetail | null>(null);
   const [modelLoading, setModelLoading] = useState(true);
 
@@ -536,7 +537,10 @@ async function fetchPoPMetrics(
   const sixtyDaysAgo = new Date(now);
   sixtyDaysAgo.setDate(now.getDate() - 60);
 
-  const toISO = (d: Date) => d.toISOString().split("T")[0];
+  const isEpoch = dateDim.type === "timestamp_epoch";
+  // DuckDB stores epoch timestamps in microseconds
+  const toFilterValue = (d: Date): string | number =>
+    isEpoch ? d.getTime() * 1000 : d.toISOString().split("T")[0];
 
   const client = createPlatformAPIClient();
 
@@ -548,7 +552,7 @@ async function fetchPoPMetrics(
       measures: measureNames,
       calculated_measures: [] as string[],
       filters: [
-        { field: dateDim.name, op: ">=", value: toISO(thirtyDaysAgo) },
+        { field: dateDim.name, op: ">=", value: toFilterValue(thirtyDaysAgo) },
       ],
       joins: [] as string[],
       order_by: [] as Array<{ field: string; dir: "asc" | "desc" }>,
@@ -559,8 +563,8 @@ async function fetchPoPMetrics(
     const previousQuery = {
       ...currentQuery,
       filters: [
-        { field: dateDim.name, op: ">=", value: toISO(sixtyDaysAgo) },
-        { field: dateDim.name, op: "<", value: toISO(thirtyDaysAgo) },
+        { field: dateDim.name, op: ">=", value: toFilterValue(sixtyDaysAgo) },
+        { field: dateDim.name, op: "<", value: toFilterValue(thirtyDaysAgo) },
       ],
     };
 

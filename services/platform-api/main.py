@@ -52,7 +52,7 @@ TENANTS_YAML = Path(__file__).parent.parent.parent / "tenants.yaml"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://localhost:3000"],
+    allow_origins=["http://localhost:8000", "http://localhost:8002", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,12 +73,69 @@ def _get_db_connection() -> duckdb.DuckDBPyConnection:
 
 
 def _get_query_builder(tenant_slug: str) -> QueryBuilder:
+    """Get a QueryBuilder for the tenant.
+
+    Prefers hand-written YAML config if it exists, otherwise auto-generates
+    a QueryBuilder-compatible config from the BSL metadata catalog.
+    """
     config_path = Path(__file__).parent / "semantic_configs" / f"{tenant_slug}.yaml"
-    if not config_path.exists():
-        raise HTTPException(status_code=404, detail=f"No config for tenant: {tenant_slug}")
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    return QueryBuilder(config)
+    if config_path.exists():
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+        return QueryBuilder(config)
+
+    # Auto-generate from BSL metadata (no YAML needed)
+    _get_bsl_models(tenant_slug)  # ensure models + metadata are built
+    metadata = get_tenant_metadata(tenant_slug)
+    if not metadata:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No semantic models found for tenant: {tenant_slug}. Run dbt first.",
+        )
+
+    models = []
+    for subject, meta in metadata.items():
+        table_name = meta["table"]
+        columns = meta.get("columns", {})
+
+        dimensions = [
+            {"name": col_name, "type": info.get("bsl_type", "string")}
+            for col_name, info in columns.items()
+            if info.get("role") == "dimension"
+        ]
+        measures = [
+            {"name": col_name, "type": info.get("bsl_type", "number"), "agg": info.get("agg", "sum")}
+            for col_name, info in columns.items()
+            if info.get("role") == "measure"
+        ]
+
+        # Map join targets from subject name → physical table name
+        joins = []
+        for j in meta.get("joins", []):
+            target_subject = j["to"]
+            target_table = (
+                metadata[target_subject]["table"]
+                if target_subject in metadata
+                else target_subject
+            )
+            joins.append({
+                "to": target_table,
+                "type": j.get("type", "left"),
+                "on": j.get("on", {}),
+            })
+
+        models.append({
+            "name": table_name,
+            "label": meta.get("label", subject),
+            "description": meta.get("description", ""),
+            "dimensions": dimensions,
+            "measures": measures,
+            "calculated_measures": meta.get("calculated_measures", []),
+            "joins": joins,
+        })
+
+    logger.info(f"Auto-generated QueryBuilder config for '{tenant_slug}': {len(models)} models")
+    return QueryBuilder({"models": models})
 
 
 def _get_bsl_models(tenant_slug: str) -> dict:
@@ -471,7 +528,20 @@ def get_model_detail(tenant_slug: str, model_name: str):
 
 @app.post("/semantic-layer/{tenant_slug}/query", response_model=SemanticQueryResponse)
 def execute_query(tenant_slug: str, request: SemanticQueryRequest):
-    """Execute a structured semantic query via the QueryBuilder."""
+    """Execute a structured semantic query via the QueryBuilder.
+
+    The frontend sends BSL subject names (e.g., 'ad_performance') but the
+    QueryBuilder uses physical table names (e.g., 'fct_tenant__ad_performance').
+    We translate here so both YAML-based and auto-generated configs work.
+    """
+    # Resolve subject name → physical table name
+    metadata = get_tenant_metadata(tenant_slug)
+    if request.model in metadata:
+        request.model = metadata[request.model]["table"]
+    for i, j in enumerate(request.joins):
+        if j in metadata:
+            request.joins[i] = metadata[j]["table"]
+
     qb = _get_query_builder(tenant_slug)
     try:
         sql, params = qb.build_query(tenant_slug, request)

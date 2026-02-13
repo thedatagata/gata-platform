@@ -66,6 +66,13 @@ classified AS (
                       OR column_name LIKE '%\_campaign' ESCAPE '\'
                       OR column_name LIKE '%\_country' ESCAPE '\'
                       OR column_name LIKE '%\_device' ESCAPE '\'
+                      -- Epoch timestamp patterns (BIGINT columns representing time)
+                      OR column_name LIKE '%\_start' ESCAPE '\'
+                      OR column_name LIKE '%\_end' ESCAPE '\'
+                      OR column_name LIKE '%\_ts' ESCAPE '\'
+                      OR column_name LIKE '%\_at' ESCAPE '\'
+                      OR column_name LIKE '%\_timestamp' ESCAPE '\'
+                      OR column_name LIKE '%\_date' ESCAPE '\'
                         THEN 'dimension'
                     -- Measure patterns (counts, totals, amounts)
                     WHEN column_name LIKE 'total\_%' ESCAPE '\'
@@ -91,18 +98,36 @@ classified AS (
             ELSE 'dimension'
         END AS semantic_role,
 
-        -- bsl_type for frontend adapter (string|date|timestamp|boolean|number)
+        -- bsl_type for frontend adapter (string|date|timestamp|timestamp_epoch|boolean|number)
         CASE
             WHEN data_type IN ('VARCHAR', 'TEXT') THEN 'string'
             WHEN data_type = 'DATE' THEN 'date'
             WHEN data_type = 'TIMESTAMP' THEN 'timestamp'
             WHEN data_type IN ('BOOLEAN', 'BOOL') THEN 'boolean'
+            -- BIGINT epoch timestamps
+            WHEN data_type IN ('BIGINT', 'INTEGER') AND (
+                column_name LIKE '%\_start' ESCAPE '\'
+                OR column_name LIKE '%\_end' ESCAPE '\'
+                OR column_name LIKE '%\_ts' ESCAPE '\'
+                OR column_name LIKE '%\_at' ESCAPE '\'
+                OR column_name LIKE '%\_timestamp' ESCAPE '\'
+                OR column_name LIKE '%\_date' ESCAPE '\'
+            ) THEN 'timestamp_epoch'
             ELSE 'number'
         END AS bsl_type,
 
         -- is_time_dimension
         CASE
             WHEN data_type IN ('DATE', 'TIMESTAMP') THEN TRUE
+            -- BIGINT epoch timestamps
+            WHEN data_type IN ('BIGINT', 'INTEGER') AND (
+                column_name LIKE '%\_start' ESCAPE '\'
+                OR column_name LIKE '%\_end' ESCAPE '\'
+                OR column_name LIKE '%\_ts' ESCAPE '\'
+                OR column_name LIKE '%\_at' ESCAPE '\'
+                OR column_name LIKE '%\_timestamp' ESCAPE '\'
+                OR column_name LIKE '%\_date' ESCAPE '\'
+            ) THEN TRUE
             ELSE FALSE
         END AS is_time_dimension
 
