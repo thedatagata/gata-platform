@@ -38,7 +38,6 @@ import * as $PlatformCapabilities from "./islands/PlatformCapabilities.tsx";
 import * as $admin_AdminLogin from "./islands/admin/AdminLogin.tsx";
 import * as $admin_DemoUserManagement from "./islands/admin/DemoUserManagement.tsx";
 import * as $app_utils_ScrollToTop from "./islands/app_utils/ScrollToTop.tsx";
-import * as $app_utils_SemanticProfiler from "./islands/app_utils/SemanticProfiler.tsx";
 import * as $app_utils_Toast from "./islands/app_utils/Toast.tsx";
 import * as $auth_LoginFlow from "./islands/auth/LoginFlow.tsx";
 import * as $charts_AutoChart from "./islands/charts/AutoChart.tsx";
@@ -47,8 +46,6 @@ import * as $dashboard_observability_PipelineHealthDashboard from "./islands/das
 import * as $dashboard_smarter_dashboard_CustomDataDashboard from "./islands/dashboard/smarter_dashboard/CustomDataDashboard.tsx";
 import * as $dashboard_smarter_dashboard_SmartDashLoadingPage from "./islands/dashboard/smarter_dashboard/SmartDashLoadingPage.tsx";
 import * as $onboarding_DashboardRouter from "./islands/onboarding/DashboardRouter.tsx";
-import * as $onboarding_DashboardSeeder from "./islands/onboarding/DashboardSeeder.tsx";
-import * as $onboarding_DemoTenantPicker from "./islands/onboarding/DemoTenantPicker.tsx";
 import * as $onboarding_SourceSelector from "./islands/onboarding/SourceSelector.tsx";
 import type { Manifest } from "$fresh/server.ts";
 
@@ -92,7 +89,6 @@ const manifest = {
     "./islands/admin/AdminLogin.tsx": $admin_AdminLogin,
     "./islands/admin/DemoUserManagement.tsx": $admin_DemoUserManagement,
     "./islands/app_utils/ScrollToTop.tsx": $app_utils_ScrollToTop,
-    "./islands/app_utils/SemanticProfiler.tsx": $app_utils_SemanticProfiler,
     "./islands/app_utils/Toast.tsx": $app_utils_Toast,
     "./islands/auth/LoginFlow.tsx": $auth_LoginFlow,
     "./islands/charts/AutoChart.tsx": $charts_AutoChart,
@@ -104,8 +100,6 @@ const manifest = {
     "./islands/dashboard/smarter_dashboard/SmartDashLoadingPage.tsx":
       $dashboard_smarter_dashboard_SmartDashLoadingPage,
     "./islands/onboarding/DashboardRouter.tsx": $onboarding_DashboardRouter,
-    "./islands/onboarding/DashboardSeeder.tsx": $onboarding_DashboardSeeder,
-    "./islands/onboarding/DemoTenantPicker.tsx": $onboarding_DemoTenantPicker,
     "./islands/onboarding/SourceSelector.tsx": $onboarding_SourceSelector,
   },
   baseUrl: import.meta.url,

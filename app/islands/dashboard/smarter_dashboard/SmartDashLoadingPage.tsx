@@ -1,137 +1,53 @@
 import { useEffect, useState } from "preact/hooks";
-import { createSemanticTables } from "../../../utils/smarter/dashboard_utils/semantic-objects.ts";
 import { WebLLMSemanticHandler } from "../../../utils/smarter/autovisualization_dashboard/webllm-handler.ts";
-import { createPlatformAPIClient } from "../../../utils/api/platform-api-client.ts";
 
 export interface LoadingProgress {
-  step: "readiness" | "duckdb" | "semantic" | "webllm" | "complete";
+  step: "webllm" | "complete";
   progress: number;
   message: string;
 }
 
 interface LoadingPageProps {
   // deno-lint-ignore no-explicit-any
-  onComplete: (db: any, webllmEngine: any) => void;
-  motherDuckToken: string;
-  mode: "connected";
-  tenantSlug?: string;
+  onComplete: (webllmEngine: any) => void;
 }
 
-export default function SmartDashLoadingPage({ onComplete, motherDuckToken, tenantSlug }: LoadingPageProps) {
+export default function SmartDashLoadingPage({ onComplete }: LoadingPageProps) {
   const [loading, setLoading] = useState<LoadingProgress>({
-    step: "readiness",
+    step: "webllm",
     progress: 0,
-    message: "Initializing...",
+    message: "Initializing AI assistant...",
   });
 
-  const [isReadyForInit, setIsReadyForInit] = useState(false);
-
-  // 1. Polling for Readiness
   useEffect(() => {
-    if (!tenantSlug) return;
-
-    let pollTimeout: number;
-    const client = createPlatformAPIClient();
-    let delay = 2000;
-
-    const poll = async () => {
-      try {
-        const status = await client.checkReadiness(tenantSlug);
-
-        if (status.is_ready) {
-           setIsReadyForInit(true);
-           return; // stop polling
-        } else {
-           let message = "Waiting for data pipeline...";
-           let progress = 5;
-
-           if (status.status === 'ingesting') { message = "Mining the swamp (Ingesting)..."; progress = 15; }
-           else if (status.status === 'modeling') { message = "Polishing the star schema..."; progress = 35; }
-           else if (status.status === 'cataloging') { message = "Indexing semantic layer..."; progress = 45; }
-
-           setLoading({
-             step: "readiness",
-             progress,
-             message: `${message} (${status.last_load_id || 'init'})`
-           });
-        }
-      } catch (e) {
-        console.error("Polling error", e);
-        setLoading(prev => ({ ...prev, message: "Connection error..." }));
-      }
-      delay = Math.min(delay * 1.5, 15000);
-      schedulePoll();
-    };
-
-    const schedulePoll = () => {
-      pollTimeout = setTimeout(poll, delay) as unknown as number;
-    };
-
-    poll();
-    schedulePoll();
-
-    return () => clearTimeout(pollTimeout);
-  }, [tenantSlug]);
-
-
-  // 2. Main Initialization Sequence
-  useEffect(() => {
-    if (!isReadyForInit) return;
-
-    async function initializeDuckDB() {
+    async function initializeWebLLM() {
       try {
         setLoading({
-          step: "duckdb",
-          progress: 50,
-          message: "Loading DuckDB WASM...",
+          step: "webllm",
+          progress: 5,
+          message: "Loading Qwen 2.5 Coder 3B...",
         });
 
-        const { MDConnection, getAsyncDuckDb } = await import("@motherduck/wasm-client");
-
-        setLoading({ step: "duckdb", progress: 20, message: "Initializing local engine..." });
-
-        const effectiveToken = motherDuckToken || "local";
-        const mdConn = await MDConnection.create({ mdToken: effectiveToken });
-        await mdConn.isInitialized();
-
-        const duckdb = await getAsyncDuckDb({ mdToken: effectiveToken });
-        const localConn = await duckdb.connect();
-
-        try { await localConn.query("SET search_path = 'memory.main,temp.main,main'"); } catch { /* ignore */ }
-
-        setLoading({ step: "duckdb", progress: 40, message: "Local engine ready..." });
-
-        // Semantic Layer
-        setLoading({ step: "semantic", progress: 60, message: "Loading semantic layer..." });
-        const semanticTables = createSemanticTables(localConn);
-
-        // WebLLM
-        setLoading({ step: "webllm", progress: 70, message: "Loading AI assistant..." });
-
-        const llmHandler = new WebLLMSemanticHandler(semanticTables, "3b");
+        const llmHandler = new WebLLMSemanticHandler({}, "3b");
         await llmHandler.initialize((p) => {
-           setLoading({
-             step: "webllm",
-             progress: 70 + (p.progress || 0) * 30,
-             message: p.text || "Loading AI model..."
-           });
+          setLoading({
+            step: "webllm",
+            progress: 5 + (p.progress || 0) * 90,
+            message: p.text || "Loading AI model...",
+          });
         });
 
-        // Complete
         setLoading({ step: "complete", progress: 100, message: "Ready!" });
-        await new Promise(r => setTimeout(r, 500));
-        // deno-lint-ignore no-explicit-any
-        (localConn as any).db = duckdb;
-        onComplete(localConn, llmHandler);
-
+        await new Promise(r => setTimeout(r, 400));
+        onComplete(llmHandler);
       } catch (err) {
-        console.error("Init failed", err);
-        setLoading({ step: "duckdb", progress: 0, message: `Error: ${(err as Error).message}` });
+        console.error("WebLLM init failed", err);
+        setLoading({ step: "webllm", progress: 0, message: `Error: ${(err as Error).message}` });
       }
     }
 
-    initializeDuckDB();
-  }, [isReadyForInit, motherDuckToken]);
+    initializeWebLLM();
+  }, []);
 
   return (
     <div class="min-h-screen bg-gradient-to-br from-gata-dark to-[#186018] flex items-center justify-center p-4">
@@ -140,20 +56,21 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, tena
           <h1 class="text-4xl font-bold text-gata-cream mb-2">
             DATA_<span class="text-gata-green">GATA</span> Analytics
           </h1>
-          <p class="text-gata-cream/80">Optimizing Tenant Pipeline</p>
+          <p class="text-gata-cream/80">Preparing your AI assistant</p>
         </div>
 
         <div class="bg-gata-dark/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-gata-green/20">
           <div class="flex justify-center mb-6">
             <div class="relative">
               <div class="w-20 h-20 border-4 border-gata-green/30 rounded-full"></div>
-              <div class="w-20 h-20 border-4 border-gata-green rounded-full border-t-transparent animate-spin absolute top-0"></div>
-              {loading.step === "complete" && (
-                <div class="absolute inset-0 flex items-center justify-center">
+              {loading.step === "complete" ? (
+                <div class="w-20 h-20 border-4 border-gata-green rounded-full absolute top-0 flex items-center justify-center">
                   <svg class="w-10 h-10 text-gata-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
+              ) : (
+                <div class="w-20 h-20 border-4 border-gata-green rounded-full border-t-transparent animate-spin absolute top-0"></div>
               )}
             </div>
           </div>
@@ -163,10 +80,7 @@ export default function SmartDashLoadingPage({ onComplete, motherDuckToken, tena
               {loading.message}
             </p>
             <p class="text-sm text-gata-cream/70">
-              {loading.step === "readiness" && "Waiting for cloud resources..."}
-              {loading.step === "duckdb" && "Initializing WASM..."}
-              {loading.step === "semantic" && "Preparing smart queries..."}
-              {loading.step === "webllm" && "Loading AI assistant..."}
+              {loading.step === "webllm" && "Loading in-browser AI model for query generation..."}
             </p>
           </div>
 

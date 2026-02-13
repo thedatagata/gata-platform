@@ -1,6 +1,4 @@
 import { SemanticLayer } from "../../system/semantic-profiler.ts";
-import { createPlatformAPIClient } from "../../api/platform-api-client.ts";
-import { adaptBSLModelToSemanticMetadata } from "../../api/bsl-config-adapter.ts";
 
 // Type definitions for semantic metadata
 export interface SemanticMetadata {
@@ -66,24 +64,6 @@ export function getSemanticMetadata(table?: string): SemanticMetadata {
   // Fallback / Error
   console.warn(`[Config] Metadata for ${selectedTable} not found in cache. Ensure fetchSemanticMetadata is called first.`);
   return { table: selectedTable, description: "Not Loaded", fields: {}, dimensions: {}, measures: {} };
-}
-
-/**
- * Fetch semantic metadata from backend and cache it
- */
-export async function fetchSemanticMetadata(tenantSlug: string, modelName: string): Promise<SemanticMetadata> {
-  if (customMetadataCache[modelName]) return customMetadataCache[modelName];
-
-  try {
-     const client = createPlatformAPIClient();
-     const modelDetail = await client.getModelDetail(tenantSlug, modelName);
-     const metadata = adaptBSLModelToSemanticMetadata(modelDetail);
-     registerCustomMetadata(metadata);
-     return metadata;
-  } catch (err) {
-     console.error(`Failed to fetch metadata for ${modelName}`, err);
-     throw err;
-  }
 }
 
 /**

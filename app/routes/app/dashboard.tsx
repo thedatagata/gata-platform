@@ -5,7 +5,6 @@ import { getSession } from "../../utils/models/session.ts";
 import { getUser } from "../../utils/models/user.ts";
 
 interface DashboardData {
-  motherDuckToken: string;
   sessionId: string;
   isAllowed: boolean;
   email?: string;
@@ -32,11 +31,9 @@ export const handler: Handlers<DashboardData> = {
     }
 
     const user = await getUser(session.username);
-    const motherDuckToken = Deno.env.get("MOTHERDUCK_TOKEN") || "";
     const isAllowed = true;
 
     return ctx.render({
-      motherDuckToken,
       sessionId,
       isAllowed,
       email: user?.email || session.username,
@@ -46,7 +43,7 @@ export const handler: Handlers<DashboardData> = {
 };
 
 export default function DashboardPage({ data }: PageProps<DashboardData>) {
-  const { motherDuckToken, sessionId, isAllowed, email, tenantSlug } = data;
+  const { sessionId, isAllowed, email, tenantSlug } = data;
 
   if (!isAllowed) {
     return (
@@ -74,24 +71,8 @@ export default function DashboardPage({ data }: PageProps<DashboardData>) {
     );
   }
 
-  if (!motherDuckToken) {
-    return (
-      <div class="min-h-screen bg-gata-dark p-8">
-        <div class="max-w-2xl mx-auto">
-          <div class="bg-gata-green/10 border-2 border-gata-green rounded-lg p-6">
-            <h2 class="font-bold text-gata-green text-2xl">Configuration Required</h2>
-            <p class="text-gata-cream/90 mt-2">
-              Please set the MOTHERDUCK_TOKEN environment variable.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <DashboardRouter
-      motherDuckToken={motherDuckToken}
       sessionId={sessionId}
       tenantSlug={tenantSlug}
     />

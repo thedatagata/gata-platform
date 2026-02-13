@@ -214,6 +214,43 @@ Return a JSON object: {"sql": "...", "explanation": "..."}`;
    * Generates a structured semantic query request for the backend BSL Agent.
    * Pass 1 of the Hybrid Execution Flow.
    */
+  /**
+   * Pass 3: Generate plain-English insights from query results.
+   * Analyzes the returned data and produces a summary + follow-up ideas.
+   */
+  async generateInsights(originalPrompt: string, data: Record<string, unknown>[]): Promise<string> {
+    const sampleData = data.slice(0, 10);
+    const columns = data.length > 0 ? Object.keys(data[0]) : [];
+
+    const prompt = `You are a data analyst. The user asked: "${originalPrompt}"
+
+Here are the query results (${data.length} total rows, showing first ${sampleData.length}):
+Columns: ${columns.join(", ")}
+Data: ${JSON.stringify(sampleData, null, 1)}
+
+Provide:
+1. A 2-3 sentence summary of the key findings
+2. One notable pattern or outlier in the data
+3. Two follow-up questions the user could explore next
+
+Keep it concise and actionable. No markdown headers.`;
+
+    const completion = await this.engine.chat.completions.create({
+      messages: [
+        { role: "system", content: "You are a concise data analyst. Provide clear insights from query results." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 500,
+    });
+
+    return completion.choices[0].message.content.trim();
+  }
+
+  /**
+   * Generates a structured semantic query request for the backend BSL Agent.
+   * Pass 1 of the Hybrid Execution Flow.
+   */
   async generateSemanticRequest(
     userPrompt: string,
     modelName: string,
