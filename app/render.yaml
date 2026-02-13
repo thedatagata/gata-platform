@@ -9,10 +9,6 @@ services:
     envVars:
       - key: DENO_ENV
         value: production
-      - key: LAUNCHDARKLY_SDK_KEY
-        sync: false
-      - key: LAUNCHDARKLY_CLIENT_ID
-        sync: false
       - key: MOTHERDUCK_TOKEN
         sync: false
       - key: SESSION_SECRET

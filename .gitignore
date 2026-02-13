@@ -27,3 +27,4 @@ sandbox.duckdb
 sandbox.db
 *.duckdb
 
+app/nul

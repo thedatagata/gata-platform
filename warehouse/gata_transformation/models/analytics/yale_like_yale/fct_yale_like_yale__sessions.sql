@@ -1,0 +1,1 @@
+{{ build_fct_sessions('yale_like_yale') }}

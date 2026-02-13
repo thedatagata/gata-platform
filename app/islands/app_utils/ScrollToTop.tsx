@@ -27,10 +27,10 @@ export default function ScrollToTop() {
   return (
     <button 
       onClick={scrollToTop} 
-      class={`fixed bottom-6 right-6 p-3 bg-[#90C137] text-white rounded-full shadow-lg transition-opacity duration-300 hover:bg-[#7dab2a] focus:outline-none ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      class={`fixed bottom-6 right-6 p-3 bg-gata-green text-white rounded-full shadow-lg transition-opacity duration-300 hover:bg-gata-hover focus:outline-none ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       aria-label="Scroll to top"
     >
-      <i class="fas fa-arrow-up"></i>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
     </button>
   );
 }

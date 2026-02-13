@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='yale_like_yale', source_name='facebook_ads', schema_hash='c504a8d73ee244892e3a5b6a58af6f26', master_model_id='facebook_ads_api_v1_ads', source_table='raw_yale_like_yale_facebook_ads_ads') }}

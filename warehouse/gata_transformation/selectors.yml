@@ -31,6 +31,8 @@ selectors:
           value: models/intermediate
         - method: path
           value: models/analytics
+        - method: path
+          value: models/platform/ops
 
   # Safe full-refresh: everything EXCEPT master models
   # Use: dbt run --full-refresh --selector safe_full_refresh

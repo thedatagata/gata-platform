@@ -71,8 +71,6 @@ export const handler: Handlers = {
           success: true,
           user: {
             username: user.username,
-            plan_tier: user.plan_tier,
-            ai_addon_unlocked: user.ai_addon_unlocked,
           },
         }),
         { headers }

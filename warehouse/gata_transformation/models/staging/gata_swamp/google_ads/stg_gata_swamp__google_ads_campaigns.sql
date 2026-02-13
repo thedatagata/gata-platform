@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='gata_swamp', source_name='google_ads', schema_hash='c20c2cbf3e7b35f87ac78757b942143c', master_model_id='google_ads_api_v1_campaigns', source_table='raw_gata_swamp_google_ads_campaigns') }}

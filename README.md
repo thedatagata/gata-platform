@@ -1,26 +1,57 @@
 # GATA Platform
 
-**Multi-Tenant Analytics Platform with Automated Onboarding, Source-Agnostic Star Schemas, and a Config-Free Semantic Layer**
+**Multi-Tenant Analytics Platform with Automated Onboarding, Source-Agnostic
+Star Schemas, and a Config-Free Semantic Layer**
 
-**Status:** Beta — Full pipeline operational (136 dbt models, 133 PASS), BSL semantic layer auto-populates from star schema, natural language queries via Ollama, 67 Python API tests passing
-**Stack:** dlt / dbt / DuckDB / MotherDuck / Deno Fresh / FastAPI / Boring Semantic Layer / Ollama / LangChain
+**Status:** Beta v2.5 — Full pipeline operational (136 dbt models, 133 PASS),
+Hybrid Query Engine (Local AI + Backend BSL) active, 67 Python API tests passing
+**Stack:** dlt / dbt / DuckDB / MotherDuck / Deno Fresh / FastAPI / Boring
+Semantic Layer / Ollama / WebLLM / LangChain
 
 ---
 
 ## What This Project Is
 
-GATA Platform is a multi-tenant data platform that demonstrates how a single analytics engineer can architect and build a production-grade system covering ingestion, transformation, governance, and analytics serving. The project solves a real problem in the marketing analytics space: businesses use different combinations of ad platforms, ecommerce tools, and analytics products, but they all need the same reporting outputs.
+GATA Platform is a multi-tenant data platform that demonstrates how a single
+analytics engineer can architect and build a production-grade system covering
+ingestion, transformation, governance, and analytics serving. The project solves
+a real problem in the marketing analytics space: businesses use different
+combinations of ad platforms, ecommerce tools, and analytics products, but they
+all need the same reporting outputs.
 
 The platform:
 
-1. **Onboards tenants automatically** — a new customer selects their data sources, and the platform scaffolds ingestion, staging, and reporting models without manual SQL. The onboarding script generates dbt models, registers schema hashes, and wires up the push circuit.
-2. **Produces identical star schemas regardless of source mix** — whether a tenant uses Shopify + Facebook Ads or BigCommerce + Bing Ads, the analytics layer outputs the same fact and dimension tables through an engine/factory macro architecture. 13 source-specific engines normalize to 6 canonical star schema tables per tenant.
-3. **Preserves raw data for logic replay** — every record carries its original JSON payload alongside extracted fields, so when business logic changes (conversion event definitions, attribution models, UTM mappings), the reporting layer can be rebuilt from raw data without re-ingesting.
-4. **Tracks configuration state over time** — Data Vault-inspired hubs and satellites version tenant configs and schema fingerprints, so when a tenant changes their conversion event definition, the platform knows exactly what changed, when, and can replay the new logic against historical raw data.
-5. **Auto-populates a semantic layer with zero config** — the BSL (Boring Semantic Layer) reads the star schema catalog at runtime, classifies every column as dimension or measure, infers aggregations, detects calculated measures (CTR, CPC, AOV), and discovers join paths — all from the physical table structure. New tenants get full analytics functionality immediately after `dbt run`.
-6. **Answers natural language analytics questions** — an Ollama-powered LLM agent (Qwen 2.5 Coder 7B) uses BSL Tools to translate questions like "show me total spend by platform" into Ibis queries, executes them against the warehouse, and returns records with ECharts visualizations.
+1. **Onboards tenants automatically** — a new customer selects their data
+   sources, and the platform scaffolds ingestion, staging, and reporting models
+   without manual SQL. The onboarding script generates dbt models, registers
+   schema hashes, and wires up the push circuit.
+2. **Produces identical star schemas regardless of source mix** — whether a
+   tenant uses Shopify + Facebook Ads or BigCommerce + Bing Ads, the analytics
+   layer outputs the same fact and dimension tables through an engine/factory
+   macro architecture. 13 source-specific engines normalize to 6 canonical star
+   schema tables per tenant.
+3. **Preserves raw data for logic replay** — every record carries its original
+   JSON payload alongside extracted fields, so when business logic changes
+   (conversion event definitions, attribution models, UTM mappings), the
+   reporting layer can be rebuilt from raw data without re-ingesting.
+4. **Tracks configuration state over time** — Data Vault-inspired hubs and
+   satellites version tenant configs and schema fingerprints, so when a tenant
+   changes their conversion event definition, the platform knows exactly what
+   changed, when, and can replay the new logic against historical raw data.
+5. **Auto-populates a semantic layer with zero config** — the BSL (Boring
+   Semantic Layer) reads the star schema catalog at runtime, classifies every
+   column as dimension or measure, infers aggregations, detects calculated
+   measures (CTR, CPC, AOV), and discovers join paths — all from the physical
+   table structure. New tenants get full analytics functionality immediately
+   after `dbt run`.
+6. **Answers natural language analytics questions (Hybrid)** — A "Two-Pass"
+   engine uses local in-browser AI (WebLLM) to plan queries as structured JSON,
+   then executes them via a governed backend API (Ollama/MotherDuck). This
+   ensures privacy and speed while maintaining security and correctness.
 
-The project uses fictional tenants (Tyrell Corporation, Wayne Enterprises, Stark Industries) with synthetic data generated by mock data engines. No proprietary data or client IP is involved.
+The project uses fictional tenants (Tyrell Corporation, Wayne Enterprises, Stark
+Industries) with synthetic data generated by mock data engines. No proprietary
+data or client IP is involved.
 
 ---
 
@@ -86,22 +117,34 @@ The project uses fictional tenants (Tyrell Corporation, Wayne Enterprises, Stark
 
 ## Registry-Driven Push Architecture
 
-Data flows from raw landing tables to the star schema through a five-layer pipeline. Routing decisions are based on physical schema fingerprints, not naming conventions.
+Data flows from raw landing tables to the star schema through a five-layer
+pipeline. Routing decisions are based on physical schema fingerprints, not
+naming conventions.
 
 ### Layer 1: Sources
 
-Auto-generated `_sources.yml` files that declare raw landing tables as dbt sources. Each tenant gets one directory per enabled platform. Created by `scripts/onboard_tenant.py`.
+Auto-generated `_sources.yml` files that declare raw landing tables as dbt
+sources. Each tenant gets one directory per enabled platform. Created by
+`scripts/onboard_tenant.py`.
 
 ### Layer 2: Staging (The Push Circuit)
 
-Staging models are "pushers." Each one is a view generated by the `generate_staging_pusher` macro that:
+Staging models are "pushers." Each one is a view generated by the
+`generate_staging_pusher` macro that:
 
 1. SELECTs all columns from the raw source table
-2. Adds metadata: `tenant_slug`, `tenant_skey` (MD5 surrogate key), `source_platform`, `source_schema_hash`
-3. Packs the entire source row into a single `raw_data_payload` JSON column via `row_to_json(base)`
-4. Fires `sync_to_master_hub()` as a **post-hook** — after the view is created, the macro runs a MERGE INTO the target master model
+2. Adds metadata: `tenant_slug`, `tenant_skey` (MD5 surrogate key),
+   `source_platform`, `source_schema_hash`
+3. Packs the entire source row into a single `raw_data_payload` JSON column via
+   `row_to_json(base)`
+4. Fires `sync_to_master_hub()` as a **post-hook** — after the view is created,
+   the macro runs a MERGE INTO the target master model
 
-The MERGE deduplicates on `tenant_slug + source_platform + MD5(raw_data_payload)`, so re-running the pipeline is idempotent. The target master model is determined by the `source_schema_hash` — a structural fingerprint of the source table's columns and types, matched against the `connector_blueprints` registry.
+The MERGE deduplicates on
+`tenant_slug + source_platform + MD5(raw_data_payload)`, so re-running the
+pipeline is idempotent. The target master model is determined by the
+`source_schema_hash` — a structural fingerprint of the source table's columns
+and types, matched against the `connector_blueprints` registry.
 
 ```sql
 -- What sync_to_master_hub does:
@@ -115,22 +158,27 @@ WHEN NOT MATCHED THEN INSERT (...)
 
 ### Layer 3: Master Models (Multi-Tenant Sinks)
 
-31 master model tables, one per connector object (e.g., `platform_mm__shopify_api_v1_orders`, `platform_mm__facebook_ads_api_v1_facebook_insights`). Every record contains:
+31 master model tables, one per connector object (e.g.,
+`platform_mm__shopify_api_v1_orders`,
+`platform_mm__facebook_ads_api_v1_facebook_insights`). Every record contains:
 
-| Column | Purpose |
-|:-------|:--------|
-| `tenant_slug` | Which tenant owns this record |
-| `source_platform` | Which connector produced it (e.g., `facebook_ads` vs `instagram_ads`) |
-| `tenant_skey` | MD5 surrogate key for the tenant + platform + object primary key |
-| `source_schema_hash` | Structural fingerprint of the source table |
-| `raw_data_payload` | The complete original record as JSON |
-| `loaded_at` | When the record was pushed |
+| Column               | Purpose                                                               |
+| :------------------- | :-------------------------------------------------------------------- |
+| `tenant_slug`        | Which tenant owns this record                                         |
+| `source_platform`    | Which connector produced it (e.g., `facebook_ads` vs `instagram_ads`) |
+| `tenant_skey`        | MD5 surrogate key for the tenant + platform + object primary key      |
+| `source_schema_hash` | Structural fingerprint of the source table                            |
+| `raw_data_payload`   | The complete original record as JSON                                  |
+| `loaded_at`          | When the record was pushed                                            |
 
-Facebook Ads and Instagram Ads share master models (`facebook_ads_api_v1`) because they use the same Meta API. They are differentiated by `source_platform` downstream.
+Facebook Ads and Instagram Ads share master models (`facebook_ads_api_v1`)
+because they use the same Meta API. They are differentiated by `source_platform`
+downstream.
 
 ### Layer 4: Intermediate (Tenant Isolation + Field Extraction)
 
-20 intermediate models (8 Tyrell, 6 Wayne, 6 Stark) that filter by `tenant_slug` and extract typed fields from `raw_data_payload` using DuckDB JSON syntax:
+20 intermediate models (8 Tyrell, 6 Wayne, 6 Stark) that filter by `tenant_slug`
+and extract typed fields from `raw_data_payload` using DuckDB JSON syntax:
 
 ```sql
 -- Scalar extraction with type cast
@@ -143,49 +191,75 @@ raw_data_payload->'$.line_items' AS line_items_json
 CAST(raw_data_payload->>'$.cost_micros' AS BIGINT) / 1000000.0 AS spend
 ```
 
-Intermediate models also apply tenant-specific business logic from `tenants.yaml` — conversion event definitions, funnel step mappings, and attribution rules. Most use the `generate_intermediate_unpacker` macro; models with computed columns or complex JSON (line items, event params) are written as raw SQL.
+Intermediate models also apply tenant-specific business logic from
+`tenants.yaml` — conversion event definitions, funnel step mappings, and
+attribution rules. Most use the `generate_intermediate_unpacker` macro; models
+with computed columns or complex JSON (line items, event params) are written as
+raw SQL.
 
 ### Layer 5: Analytics (Star Schema)
 
-18 shell models (6 per tenant) that call factory macros. Each factory looks up engines by source name and UNION ALLs the results. If a source isn't in the tenant's config, it's skipped.
+18 shell models (6 per tenant) that call factory macros. Each factory looks up
+engines by source name and UNION ALLs the results. If a source isn't in the
+tenant's config, it's skipped.
 
 ---
 
 ## Shell and Engine Architecture
 
-The reporting layer uses a **Shell and Engine** pattern to decouple source-specific logic from the star schema contract:
+The reporting layer uses a **Shell and Engine** pattern to decouple
+source-specific logic from the star schema contract:
 
-- **Engines** (`macros/engines/`) are dbt macros that know how to read a specific source's intermediate model and normalize it to a canonical schema. There are 13 engines across 3 domains: 7 paid ads, 3 ecommerce, 3 analytics.
-- **Factories** (`macros/factories/`) are dbt macros that accept a tenant slug and a list of enabled sources, look up the correct engine for each source, and UNION ALL the results. There are 6 factories — one per star schema table.
-- **Shell Models** (`models/analytics/{tenant}/`) are thin SQL files that call the appropriate factory with the tenant's source list from config. These are the only models created per tenant — engines and factories are shared.
+- **Engines** (`macros/engines/`) are dbt macros that know how to read a
+  specific source's intermediate model and normalize it to a canonical schema.
+  There are 13 engines across 3 domains: 7 paid ads, 3 ecommerce, 3 analytics.
+- **Factories** (`macros/factories/`) are dbt macros that accept a tenant slug
+  and a list of enabled sources, look up the correct engine for each source, and
+  UNION ALL the results. There are 6 factories — one per star schema table.
+- **Shell Models** (`models/analytics/{tenant}/`) are thin SQL files that call
+  the appropriate factory with the tenant's source list from config. These are
+  the only models created per tenant — engines and factories are shared.
 
-This means `fct_tyrell_corp__ad_performance.sql` and `fct_wayne_enterprises__ad_performance.sql` both produce the same column contract (`tenant_slug, source_platform, report_date, campaign_id, ad_group_id, ad_id, spend, impressions, clicks, conversions`) despite pulling from completely different source platforms.
+This means `fct_tyrell_corp__ad_performance.sql` and
+`fct_wayne_enterprises__ad_performance.sql` both produce the same column
+contract
+(`tenant_slug, source_platform, report_date, campaign_id, ad_group_id, ad_id, spend, impressions, clicks, conversions`)
+despite pulling from completely different source platforms.
 
 ### Engine and Factory Contracts
 
 **Paid Ads** — All 7 engines normalize to:
+
 ```
 tenant_slug | source_platform | report_date | campaign_id | ad_group_id | ad_id
 spend | impressions | clicks | conversions
 ```
-Sources that lack granularity (e.g., Bing's account-level report has no `campaign_id`) emit `CAST(NULL AS VARCHAR)` for missing columns.
+
+Sources that lack granularity (e.g., Bing's account-level report has no
+`campaign_id`) emit `CAST(NULL AS VARCHAR)` for missing columns.
 
 **Ecommerce** — All 3 engines normalize to:
+
 ```
 tenant_slug | source_platform | order_id | order_date | total_price | currency
 financial_status | customer_email | customer_id | line_items_json
 ```
 
 **Analytics (Sessions)** — All 3 engines produce sessionized output:
+
 ```
 tenant_slug | source_platform | session_id | user_pseudo_id | user_id
 session_start_ts | session_end_ts | session_duration_seconds | events_in_session
 traffic_source | traffic_medium | traffic_campaign | geo_country | device_category
 is_conversion_session | session_revenue | transaction_id
 ```
-Google Analytics and Mixpanel perform 30-minute inactivity sessionization. Amplitude uses native `session_id`. All accept a `conversion_events` list parameter for the `is_conversion_session` flag.
+
+Google Analytics and Mixpanel perform 30-minute inactivity sessionization.
+Amplitude uses native `session_id`. All accept a `conversion_events` list
+parameter for the `is_conversion_session` flag.
 
 **Analytics (Events)** — All 3 engines also produce a raw event stream:
+
 ```
 tenant_slug | source_platform | event_id | event_name | event_timestamp
 user_pseudo_id | user_id | traffic_source | traffic_medium | traffic_campaign
@@ -193,6 +267,7 @@ geo_country | device_category | page_path | ecommerce_order_id | ecommerce_reven
 ```
 
 **Users (Dimension)** — Identity resolution across analytics + ecommerce:
+
 ```
 tenant_slug | source_platform | user_key | user_pseudo_id | user_id
 customer_email | customer_id | first_seen_at | last_seen_at | total_sessions
@@ -200,6 +275,7 @@ total_events | total_orders | total_revenue | is_customer
 ```
 
 **Campaigns (Dimension)** — Campaign metadata across ad platforms:
+
 ```
 tenant_slug | source_platform | campaign_id | campaign_name | campaign_status
 ```
@@ -208,159 +284,248 @@ tenant_slug | source_platform | campaign_id | campaign_name | campaign_status
 
 ## Automated Onboarding
 
-Adding a new tenant to the platform is a two-command process. No SQL is written by hand.
+Adding a new tenant to the platform is a two-command process. No SQL is written
+by hand.
 
 ### Step 1: Initialize the Connector Library
 
-`scripts/initialize_connector_library.py` builds the `connector_blueprints` registry that maps physical schema fingerprints to master models. For each of the 13 supported connectors, it:
+`scripts/initialize_connector_library.py` builds the `connector_blueprints`
+registry that maps physical schema fingerprints to master models. For each of
+the 13 supported connectors, it:
 
 1. Creates a dummy tenant with only that connector enabled
 2. Runs the mock data orchestrator to generate a sample dlt schema
-3. Computes an MD5 hash of each table's column names and types (the "DNA fingerprint")
-4. Registers the mapping: `schema_hash -> master_model_id` (e.g., `a3f7c2... -> shopify_api_v1_orders`)
+3. Computes an MD5 hash of each table's column names and types (the "DNA
+   fingerprint")
+4. Registers the mapping: `schema_hash -> master_model_id` (e.g.,
+   `a3f7c2... -> shopify_api_v1_orders`)
 
-This only needs to run once (or when connector schemas change). The registry is stored in `connector_blueprints` table in DuckDB.
+This only needs to run once (or when connector schemas change). The registry is
+stored in `connector_blueprints` table in DuckDB.
 
 ### Step 2: Onboard a Tenant
 
 `scripts/onboard_tenant.py <slug> --target sandbox` does everything else:
 
-1. **Reads `tenants.yaml`** to find the tenant's enabled sources, generation parameters, and table-level logic
-2. **Generates mock data** via `MockOrchestrator` — Pydantic-validated synthetic records landed into DuckDB/MotherDuck by dlt
-3. **Calculates schema fingerprints** for each landed table and looks up the correct `master_model_id` from `connector_blueprints`
-4. **Generates dbt source shims** — `_sources.yml` files in `models/sources/{tenant}/{platform}/` declaring the raw tables
-5. **Generates staging pushers** — One `.sql` file per source table calling `generate_staging_pusher(tenant_slug, source_name, schema_hash, master_model_id, source_table)`. Each includes the `sync_to_master_hub()` post-hook
+1. **Reads `tenants.yaml`** to find the tenant's enabled sources, generation
+   parameters, and table-level logic
+2. **Generates mock data** via `MockOrchestrator` — Pydantic-validated synthetic
+   records landed into DuckDB/MotherDuck by dlt
+3. **Calculates schema fingerprints** for each landed table and looks up the
+   correct `master_model_id` from `connector_blueprints`
+4. **Generates dbt source shims** — `_sources.yml` files in
+   `models/sources/{tenant}/{platform}/` declaring the raw tables
+5. **Generates staging pushers** — One `.sql` file per source table calling
+   `generate_staging_pusher(tenant_slug, source_name, schema_hash, master_model_id, source_table)`.
+   Each includes the `sync_to_master_hub()` post-hook
 
-After onboarding, `dbt run` materializes the full pipeline: staging views fire their post-hooks to MERGE data into master models, intermediate models extract typed fields, and analytics shell models assemble the star schema.
+After onboarding, `dbt run` materializes the full pipeline: staging views fire
+their post-hooks to MERGE data into master models, intermediate models extract
+typed fields, and analytics shell models assemble the star schema.
 
 ### What Happens After dbt run
 
-Once the star schema exists, the BSL semantic layer auto-populates with zero manual config:
+Once the star schema exists, the BSL semantic layer auto-populates with zero
+manual config:
 
-1. `platform_ops__boring_semantic_layer` scans `INFORMATION_SCHEMA` to catalog all `fct_*` and `dim_*` tables
-2. `platform_ops__bsl_column_catalog` classifies every column (dimension vs measure, bsl_type, inferred_agg) using deterministic SQL rules
-3. On first API request, `bsl_model_builder.py` reads the catalog and auto-infers calculated measures (CTR, CPC, CPM, AOV, conversion_rate) and joins (matching column names across fact/dim tables)
-4. The tenant's semantic models are immediately queryable via API — dimensions with types, measures with aggregations, calculated measures, joins
+1. `platform_ops__boring_semantic_layer` scans `INFORMATION_SCHEMA` to catalog
+   all `fct_*` and `dim_*` tables
+2. `platform_ops__bsl_column_catalog` classifies every column (dimension vs
+   measure, bsl_type, inferred_agg) using deterministic SQL rules
+3. On first API request, `bsl_model_builder.py` reads the catalog and
+   auto-infers calculated measures (CTR, CPC, CPM, AOV, conversion_rate) and
+   joins (matching column names across fact/dim tables)
+4. The tenant's semantic models are immediately queryable via API — dimensions
+   with types, measures with aggregations, calculated measures, joins
 
-No YAML config needed. New tenants get full BSL functionality the moment their star schema tables exist.
+No YAML config needed. New tenants get full BSL functionality the moment their
+star schema tables exist.
 
 ### What the Fingerprint-Based Routing Solves
 
-The schema hash approach means routing is determined by **physical truth** (what columns a table actually has), not naming conventions. If a connector's API version changes and produces different columns, the hash changes, and the router either matches a known blueprint or flags the table as unknown. This prevents silent data corruption from schema drift.
+The schema hash approach means routing is determined by **physical truth** (what
+columns a table actually has), not naming conventions. If a connector's API
+version changes and produces different columns, the hash changes, and the router
+either matches a known blueprint or flags the table as unknown. This prevents
+silent data corruption from schema drift.
 
 ---
 
 ## Hubs and Satellites (State Tracking)
 
-The platform uses Data Vault-inspired hubs and satellites to track configuration and schema changes over time. This is what makes logic replay possible — when a tenant changes their conversion event from `purchase` to `checkout_complete`, the platform knows what changed, when, and can rebuild the reporting layer from the raw JSON in master models.
+The platform uses Data Vault-inspired hubs and satellites to track configuration
+and schema changes over time. This is what makes logic replay possible — when a
+tenant changes their conversion event from `purchase` to `checkout_complete`,
+the platform knows what changed, when, and can rebuild the reporting layer from
+the raw JSON in master models.
 
 ### Tenant Config History (`platform_sat__tenant_config_history`)
 
-The core satellite. It reads the tenant manifest from `dbt_project.yml` and unpacks the nested JSON structure into individual rows per tenant + source + table:
+The core satellite. It reads the tenant manifest from `dbt_project.yml` and
+unpacks the nested JSON structure into individual rows per tenant + source +
+table:
 
 ```
 tenant_slug | source_name | table_name | table_logic | logic_hash | updated_at
 ```
 
-The `table_logic` column contains the raw JSON business logic for that specific table (conversion events, funnel steps, etc.), and `logic_hash` is its MD5. When a tenant's `tenants.yaml` config changes, a new row appears with a different `logic_hash`. The model deduplicates with `QUALIFY ROW_NUMBER() OVER (PARTITION BY tenant_slug, source_name, table_name, logic_hash ORDER BY updated_at DESC) = 1`.
+The `table_logic` column contains the raw JSON business logic for that specific
+table (conversion events, funnel steps, etc.), and `logic_hash` is its MD5. When
+a tenant's `tenants.yaml` config changes, a new row appears with a different
+`logic_hash`. The model deduplicates with
+`QUALIFY ROW_NUMBER() OVER (PARTITION BY tenant_slug, source_name, table_name, logic_hash ORDER BY updated_at DESC) = 1`.
 
-This is what enables logic replay: the historical raw data in master models doesn't change, but the logic applied to it (which events count as conversions, how UTMs are mapped) is versioned. Rebuilding the reporting layer applies the current logic version to all historical data.
+This is what enables logic replay: the historical raw data in master models
+doesn't change, but the logic applied to it (which events count as conversions,
+how UTMs are mapped) is versioned. Rebuilding the reporting layer applies the
+current logic version to all historical data.
 
 ### Hub Key Registry (`hub_key_registry`)
 
-Generates surrogate keys for every tenant + source + table combination by reading from the config history satellite. Tracks:
+Generates surrogate keys for every tenant + source + table combination by
+reading from the config history satellite. Tracks:
 
 ```
 client_slug | platform_name | table_name | tenant_skey | logic_config_hash | logic_version_at
 ```
 
-This provides a single registry of all tenant keys across the platform for cross-referencing and deduplication.
+This provides a single registry of all tenant keys across the platform for
+cross-referencing and deduplication.
 
 ### Source Schema History (`platform_sat__source_schema_history`)
 
-A sink table populated by post-hooks during staging. Tracks physical schema fingerprints over time:
+A sink table populated by post-hooks during staging. Tracks physical schema
+fingerprints over time:
 
 ```
 tenant_slug | platform_name | source_table_name | source_schema_hash | source_schema | first_seen_at
 ```
 
-When a source API changes its column structure, the new fingerprint appears here. Combined with the `connector_blueprints` registry, this enables detection of schema drift — if a table's fingerprint doesn't match any known blueprint, the pipeline flags it.
+When a source API changes its column structure, the new fingerprint appears
+here. Combined with the `connector_blueprints` registry, this enables detection
+of schema drift — if a table's fingerprint doesn't match any known blueprint,
+the pipeline flags it.
 
 ### Tenant Source Configs (`platform_sat__tenant_source_configs`)
 
-A latest-snapshot view over the config history — the current active configuration per tenant + source + table. Used by operational models for quick lookups without scanning the full history.
+A latest-snapshot view over the config history — the current active
+configuration per tenant + source + table. Used by operational models for quick
+lookups without scanning the full history.
 
 ---
 
 ## Observability and Metadata Pipeline
 
-The platform captures its own execution metadata via dbt hooks, creating a self-describing DAG that tracks what ran, what passed, what failed, and how the pipeline's models relate to each other.
+The platform captures its own execution metadata via dbt hooks, creating a
+self-describing DAG that tracks what ran, what passed, what failed, and how the
+pipeline's models relate to each other.
 
 ### Artifact Capture (on-run-start / on-run-end)
 
-The `metadata_ops.sql` macro file defines hooks that run automatically with every `dbt run`:
+The `metadata_ops.sql` macro file defines hooks that run automatically with
+every `dbt run`:
 
-**on-run-start: `init_artifact_tables()`**
-Creates (or recreates on full refresh) three artifact tables in a `dbt_artifacts` schema:
-- `model_artifacts__current` — every model's node ID, name, materialization, dependencies, tags, config
+**on-run-start: `init_artifact_tables()`** Creates (or recreates on full
+refresh) three artifact tables in a `dbt_artifacts` schema:
+
+- `model_artifacts__current` — every model's node ID, name, materialization,
+  dependencies, tags, config
 - `run_results__current` — execution status, timing, rows affected per model
 - `test_artifacts__current` — test definitions and their target models
 
-**on-run-end: `upload_*()` macros**
-After all models execute:
-- `upload_model_definitions()` inserts every model in the DAG with its dependency graph (`depends_on_nodes` as JSON), materialization strategy, and metadata
-- `upload_run_results()` inserts per-model execution results: status (success/error/skip), `rows_affected`, `execution_time_seconds`, `invocation_id`
+**on-run-end: `upload_*()` macros** After all models execute:
+
+- `upload_model_definitions()` inserts every model in the DAG with its
+  dependency graph (`depends_on_nodes` as JSON), materialization strategy, and
+  metadata
+- `upload_run_results()` inserts per-model execution results: status
+  (success/error/skip), `rows_affected`, `execution_time_seconds`,
+  `invocation_id`
 - `upload_test_definitions()` inserts all test specs with their target model IDs
 
-These use batch inserts (25 rows per batch) to avoid DuckDB parameter limits, and a `_safe_str()` helper macro for proper escaping.
+These use batch inserts (25 rows per batch) to avoid DuckDB parameter limits,
+and a `_safe_str()` helper macro for proper escaping.
 
 ### Observability Models
 
 The artifact tables feed a layered observability pipeline:
 
 **Staging** (ephemeral + incremental):
-- `stg_platform_observability__model_definitions` — cleans and renames artifact fields, extracts `model_owner` from `meta` JSON
-- `stg_platform_observability__run_results` — incremental on `[invocation_id, node_id]`, injects `dlt_load_id` from pipeline vars for lineage
+
+- `stg_platform_observability__model_definitions` — cleans and renames artifact
+  fields, extracts `model_owner` from `meta` JSON
+- `stg_platform_observability__run_results` — incremental on
+  `[invocation_id, node_id]`, injects `dlt_load_id` from pipeline vars for
+  lineage
 
 **Intermediate** (the queryable models):
 
-| Model | What It Tracks |
-|:------|:---------------|
-| `int_platform_observability__run_results` | Per-model execution status, timing, rows affected (excludes tests) |
-| `int_platform_observability__test_results` | Test pass/fail/warn status and messages |
-| `int_platform_observability__model_definitions` | Full DAG: every model's node ID, dependencies, materialization, schema |
-| `int_platform_observability__source_freshness_results` | Source freshness check results parsed from dbt artifacts |
-| `int_platform_observability__lineage_summary` | Joins run results with the master model registry to trace connector -> staging -> master model lineage |
-| `int_platform_observability__md_table_stats` | Physical table inventory from `INFORMATION_SCHEMA` — all schemas and tables in the warehouse |
-| `int_platform_observability__source_candidate_map` | Onboarding intelligence — scores unintegrated source tables as `ONBOARD`, `INVESTIGATE SWAP`, or `MONITOR` based on physical inventory + dbt health |
-| `int_platform_observability__identity_resolution_stats` | Per-tenant identity resolution rates from `dim_users`: total users, resolved customers, anonymous, resolution % |
+| Model                                                   | What It Tracks                                                                                                                                      |
+| :------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `int_platform_observability__run_results`               | Per-model execution status, timing, rows affected (excludes tests)                                                                                  |
+| `int_platform_observability__test_results`              | Test pass/fail/warn status and messages                                                                                                             |
+| `int_platform_observability__model_definitions`         | Full DAG: every model's node ID, dependencies, materialization, schema                                                                              |
+| `int_platform_observability__source_freshness_results`  | Source freshness check results parsed from dbt artifacts                                                                                            |
+| `int_platform_observability__lineage_summary`           | Joins run results with the master model registry to trace connector -> staging -> master model lineage                                              |
+| `int_platform_observability__md_table_stats`            | Physical table inventory from `INFORMATION_SCHEMA` — all schemas and tables in the warehouse                                                        |
+| `int_platform_observability__source_candidate_map`      | Onboarding intelligence — scores unintegrated source tables as `ONBOARD`, `INVESTIGATE SWAP`, or `MONITOR` based on physical inventory + dbt health |
+| `int_platform_observability__identity_resolution_stats` | Per-tenant identity resolution rates from `dim_users`: total users, resolved customers, anonymous, resolution %                                     |
 
 **Operational**:
-- `obs_platform_status__semantic_readiness` — joins the BSL catalog with latest run results to check if each star schema table's last run succeeded. Returns `is_semantic_layer_ready` per tenant/subject.
-- `platform_ops__boring_semantic_layer` — auto-catalogs all `fct_*` and `dim_*` tables from `INFORMATION_SCHEMA`, extracts tenant slug and subject via regex, builds a JSON `semantic_manifest` of column metadata per table
-- `platform_ops__bsl_column_catalog` — flattens the semantic manifest into one row per column with deterministic classification: `semantic_role` (dimension/measure), `bsl_type` (string/date/timestamp/boolean/number), `is_time_dimension`, `inferred_agg` (sum/avg/count_distinct)
+
+- `obs_platform_status__semantic_readiness` — joins the BSL catalog with latest
+  run results to check if each star schema table's last run succeeded. Returns
+  `is_semantic_layer_ready` per tenant/subject.
+- `platform_ops__boring_semantic_layer` — auto-catalogs all `fct_*` and `dim_*`
+  tables from `INFORMATION_SCHEMA`, extracts tenant slug and subject via regex,
+  builds a JSON `semantic_manifest` of column metadata per table
+- `platform_ops__bsl_column_catalog` — flattens the semantic manifest into one
+  row per column with deterministic classification: `semantic_role`
+  (dimension/measure), `bsl_type` (string/date/timestamp/boolean/number),
+  `is_time_dimension`, `inferred_agg` (sum/avg/count_distinct)
 
 ### The DAG as Data
 
-Because every model's dependencies are captured in `depends_on_nodes`, the observability pipeline contains a complete representation of the dbt DAG as queryable data. You can trace any star schema table back through its intermediate model, master model, staging pusher, and source table. Combined with `run_results`, you can answer: "When did `fct_tyrell_corp__orders` last succeed? How long did it take? Which upstream model failed?"
+Because every model's dependencies are captured in `depends_on_nodes`, the
+observability pipeline contains a complete representation of the dbt DAG as
+queryable data. You can trace any star schema table back through its
+intermediate model, master model, staging pusher, and source table. Combined
+with `run_results`, you can answer: "When did `fct_tyrell_corp__orders` last
+succeed? How long did it take? Which upstream model failed?"
 
 ---
 
 ## Two-Tier Semantic Layer
 
-The platform serves two fundamentally different query patterns and uses a purpose-built tool for each.
+The platform serves two fundamentally different query patterns and uses a
+purpose-built tool for each.
 
 ### Tier 1: In-Browser (Single-Table EDA)
 
-A fully client-side semantic layer that runs entirely in the browser with no backend dependency.
+A fully client-side semantic layer that runs entirely in the browser with no
+backend dependency.
 
 **How it works:**
-1. User loads a table into DuckDB WASM (from MotherDuck, file upload, or pre-built dataset)
-2. The **Semantic Profiler** (`semantic-profiler.ts`) runs DuckDB's `SUMMARIZE` and infers field metadata — column types, cardinality, categorical members, and smart type detection (e.g., VARCHAR columns that are actually dates via `TRY_CAST`)
-3. The **Semantic Config** (`semantic-config.ts`) generates a metadata registry: dimensions (categorical/temporal columns with optional transformations), measures (numerical columns with aggregation functions and formulas like `COUNT(DISTINCT session_id)`)
-4. The config generates an LLM system prompt containing the full dimension/measure mappings, SQL generation rules, and examples
-5. **WebLLM** (`webllm-handler.ts`) loads Qwen 2.5 Coder (3B) via `@mlc-ai/web-llm` and generates SQL from natural language using the semantic prompt, with `temperature: 0.0` for deterministic output
-6. The **Semantic Query Validator** (`semantic-query-validator.ts`) checks the generated SQL against the metadata registry — extracts column references, validates them, catches invalid DuckDB functions, and generates correction prompts for retry (up to 3 attempts)
+
+1. User loads a table into DuckDB WASM (from MotherDuck, file upload, or
+   pre-built dataset)
+2. The **Semantic Profiler** (`semantic-profiler.ts`) runs DuckDB's `SUMMARIZE`
+   and infers field metadata — column types, cardinality, categorical members,
+   and smart type detection (e.g., VARCHAR columns that are actually dates via
+   `TRY_CAST`)
+3. The **Semantic Config** (`semantic-config.ts`) generates a metadata registry:
+   dimensions (categorical/temporal columns with optional transformations),
+   measures (numerical columns with aggregation functions and formulas like
+   `COUNT(DISTINCT session_id)`)
+4. The config generates an LLM system prompt containing the full
+   dimension/measure mappings, SQL generation rules, and examples
+5. **WebLLM** (`webllm-handler.ts`) loads Qwen 2.5 Coder (3B) via
+   `@mlc-ai/web-llm` and generates SQL from natural language using the semantic
+   prompt, with `temperature: 0.0` for deterministic output
+6. The **Semantic Query Validator** (`semantic-query-validator.ts`) checks the
+   generated SQL against the metadata registry — extracts column references,
+   validates them, catches invalid DuckDB functions, and generates correction
+   prompts for retry (up to 3 attempts)
 7. DuckDB WASM executes the validated SQL client-side
 8. AutoChart renders the visualization
 
@@ -368,92 +533,107 @@ No backend round-trip. Works offline. Instant feedback.
 
 ### Tier 2: Backend BSL (Multi-Table OLAP)
 
-Single-table profiling can't express how `fct_ad_performance` joins to `dim_campaigns` on `campaign_id`, or that CTR requires dividing clicks by impressions across the same aggregation group. The backend Boring Semantic Layer handles multi-table semantics with zero manual config.
+Single-table profiling can't express how `fct_ad_performance` joins to
+`dim_campaigns` on `campaign_id`, or that CTR requires dividing clicks by
+impressions across the same aggregation group. The backend Boring Semantic Layer
+handles multi-table semantics with zero manual config.
 
 **Auto-inference from star schema:**
 
-The `platform_ops__bsl_column_catalog` dbt model classifies every column in every star schema table using deterministic SQL rules:
+The `platform_ops__bsl_column_catalog` dbt model classifies every column in
+every star schema table using deterministic SQL rules:
 
-| Data Type | Classification |
-|:----------|:---------------|
-| VARCHAR, TEXT, DATE, TIMESTAMP, BOOLEAN | Dimension |
-| DOUBLE, FLOAT, DECIMAL | Measure (agg: sum) |
-| BIGINT/INTEGER with `_id`, `_key` suffix | Dimension |
+| Data Type                                     | Classification     |
+| :-------------------------------------------- | :----------------- |
+| VARCHAR, TEXT, DATE, TIMESTAMP, BOOLEAN       | Dimension          |
+| DOUBLE, FLOAT, DECIMAL                        | Measure (agg: sum) |
+| BIGINT/INTEGER with `_id`, `_key` suffix      | Dimension          |
 | BIGINT/INTEGER with `total_`, `count_` prefix | Measure (agg: sum) |
-| Column name contains `duration`, `avg` | Measure (agg: avg) |
+| Column name contains `duration`, `avg`        | Measure (agg: avg) |
 
 At API startup, `bsl_model_builder.py` reads this catalog and auto-infers:
 
 - **Calculated measures** from column patterns:
 
-  | Pattern | Required Columns | Metric |
-  |:--------|:----------------|:-------|
-  | CTR | clicks + impressions | `clicks / impressions` |
-  | CPC | spend + clicks | `spend / clicks` |
-  | CPM | spend + impressions | `spend * 1000 / impressions` |
-  | AOV | total_price + order_id | `total_price / count_distinct(order_id)` |
+  | Pattern         | Required Columns                   | Metric                                     |
+  | :-------------- | :--------------------------------- | :----------------------------------------- |
+  | CTR             | clicks + impressions               | `clicks / impressions`                     |
+  | CPC             | spend + clicks                     | `spend / clicks`                           |
+  | CPM             | spend + impressions                | `spend * 1000 / impressions`               |
+  | AOV             | total_price + order_id             | `total_price / count_distinct(order_id)`   |
   | Conversion Rate | is_conversion_session + session_id | `conversions / count_distinct(session_id)` |
 
-- **Joins** from matching column names across fact/dim tables (e.g., `campaign_id` in `fct_ad_performance` and `dim_campaigns` → left join inferred)
+- **Joins** from matching column names across fact/dim tables (e.g.,
+  `campaign_id` in `fct_ad_performance` and `dim_campaigns` → left join
+  inferred)
 
-**YAML configs are optional overrides** — if `semantic_configs/{tenant}.yaml` exists, it can override auto-generated descriptions, labels, types, and add custom calculated measures. But a tenant without a YAML config gets fully functional BSL setup purely from the star schema.
+**YAML configs are optional overrides** — if `semantic_configs/{tenant}.yaml`
+exists, it can override auto-generated descriptions, labels, types, and add
+custom calculated measures. But a tenant without a YAML config gets fully
+functional BSL setup purely from the star schema.
 
 **Natural language queries:**
 
 The `POST /ask` endpoint routes questions through an LLM agent loop:
 
-1. **LLM available** (Ollama with Qwen 2.5 Coder 7B): The agent receives a system prompt with the tenant's model catalog. It calls BSL Tools (`list_models`, `get_model`, `query_model`) to explore the schema and execute Ibis-style queries. BSL returns records + ECharts chart specs as JSON.
-2. **No LLM available**: Keyword fallback matches the question to the most relevant model, executes a basic group-by query, and returns results with a note that Ollama is needed for full NL queries.
+1. **LLM available** (Ollama with Qwen 2.5 Coder 7B): The agent receives a
+   system prompt with the tenant's model catalog. It calls BSL Tools
+   (`list_models`, `get_model`, `query_model`) to explore the schema and execute
+   Ibis-style queries. BSL returns records + ECharts chart specs as JSON.
+2. **No LLM available**: Keyword fallback matches the question to the most
+   relevant model, executes a basic group-by query, and returns results with a
+   note that Ollama is needed for full NL queries.
 
 ### Why Two Tiers
 
-| | Tier 1 (In-Browser) | Tier 2 (Backend BSL) |
-|:--|:---------------------|:---------------------|
-| **Scope** | Single table | Multi-table with joins |
-| **Execution** | Client-side DuckDB WASM | Server-side MotherDuck/DuckDB |
-| **LLM** | WebLLM Qwen 3B (in-browser) | Ollama Qwen 7B (server-side) |
-| **Query output** | Raw SQL | Ibis expressions via BSL Tools |
-| **Join handling** | N/A | Auto-inferred from column matching |
-| **Config required** | None (auto-profiled) | None (auto-inferred from catalog) |
-| **Latency** | Instant (no network) | Network round-trip |
-| **Offline** | Yes | No |
-| **Use case** | Quick EDA, file uploads | Cross-table analytics, dashboards |
+|                     | Tier 1 (In-Browser)         | Tier 2 (Backend BSL)               |
+| :------------------ | :-------------------------- | :--------------------------------- |
+| **Scope**           | Single table                | Multi-table with joins             |
+| **Execution**       | Client-side DuckDB WASM     | Server-side MotherDuck/DuckDB      |
+| **LLM**             | WebLLM Qwen 3B (in-browser) | Ollama Qwen 7B (server-side)       |
+| **Query output**    | Raw SQL                     | Ibis expressions via BSL Tools     |
+| **Join handling**   | N/A                         | Auto-inferred from column matching |
+| **Config required** | None (auto-profiled)        | None (auto-inferred from catalog)  |
+| **Latency**         | Instant (no network)        | Network round-trip                 |
+| **Offline**         | Yes                         | No                                 |
+| **Use case**        | Quick EDA, file uploads     | Cross-table analytics, dashboards  |
 
 ---
 
 ## Platform API
 
-The FastAPI backend (`services/platform-api/`) serves semantic layer metadata and query execution.
+The FastAPI backend (`services/platform-api/`) serves semantic layer metadata
+and query execution.
 
 ### Semantic Layer Endpoints
 
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `GET` | `/semantic-layer/{tenant}/models` | List all models with dimension/measure counts and join availability |
-| `GET` | `/semantic-layer/{tenant}/models/{name}` | Full model detail: dimensions (with types), measures (with aggs), calculated measures, joins |
-| `GET` | `/semantic-layer/{tenant}/catalog` | Complete catalog for frontend consumption — all models with all metadata |
-| `GET` | `/semantic-layer/{tenant}/dimensions` | Live dimension catalog from BSL SemanticModel objects |
-| `GET` | `/semantic-layer/{tenant}/measures` | Live measure catalog from BSL SemanticModel objects |
-| `POST` | `/semantic-layer/{tenant}/query` | Structured query execution (dimensions + measures + filters → SQL → results) |
-| `POST` | `/semantic-layer/{tenant}/ask` | Natural language query via Ollama LLM agent → records + ECharts chart spec |
-| `GET` | `/semantic-layer/{tenant}` | Raw dbt catalog manifests |
-| `GET` | `/semantic-layer/{tenant}/config` | YAML enrichment config (optional overrides) |
+| Method | Endpoint                                 | Description                                                                                  |
+| :----- | :--------------------------------------- | :------------------------------------------------------------------------------------------- |
+| `GET`  | `/semantic-layer/{tenant}/models`        | List all models with dimension/measure counts and join availability                          |
+| `GET`  | `/semantic-layer/{tenant}/models/{name}` | Full model detail: dimensions (with types), measures (with aggs), calculated measures, joins |
+| `GET`  | `/semantic-layer/{tenant}/catalog`       | Complete catalog for frontend consumption — all models with all metadata                     |
+| `GET`  | `/semantic-layer/{tenant}/dimensions`    | Live dimension catalog from BSL SemanticModel objects                                        |
+| `GET`  | `/semantic-layer/{tenant}/measures`      | Live measure catalog from BSL SemanticModel objects                                          |
+| `POST` | `/semantic-layer/{tenant}/query`         | Structured query execution (dimensions + measures + filters → SQL → results)                 |
+| `POST` | `/semantic-layer/{tenant}/ask`           | Natural language query via Ollama LLM agent → records + ECharts chart spec                   |
+| `GET`  | `/semantic-layer/{tenant}`               | Raw dbt catalog manifests                                                                    |
+| `GET`  | `/semantic-layer/{tenant}/config`        | YAML enrichment config (optional overrides)                                                  |
 
 ### LLM Provider Endpoints
 
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `GET` | `/semantic-layer/llm-status` | Current LLM provider status (Ollama availability, model name) |
-| `POST` | `/semantic-layer/llm-refresh` | Force re-check Ollama availability |
+| Method | Endpoint                      | Description                                                   |
+| :----- | :---------------------------- | :------------------------------------------------------------ |
+| `GET`  | `/semantic-layer/llm-status`  | Current LLM provider status (Ollama availability, model name) |
+| `POST` | `/semantic-layer/llm-refresh` | Force re-check Ollama availability                            |
 
 ### Observability Endpoints
 
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `GET` | `/observability/{tenant}/summary` | Pipeline health: model count, pass/fail/error, avg execution time |
-| `GET` | `/observability/{tenant}/runs` | Per-model run results with status and timing |
-| `GET` | `/observability/{tenant}/tests` | Test results with pass/fail status and messages |
-| `GET` | `/observability/{tenant}/identity-resolution` | Identity resolution stats: total users, resolved customers, resolution rate |
+| Method | Endpoint                                      | Description                                                                 |
+| :----- | :-------------------------------------------- | :-------------------------------------------------------------------------- |
+| `GET`  | `/observability/{tenant}/summary`             | Pipeline health: model count, pass/fail/error, avg execution time           |
+| `GET`  | `/observability/{tenant}/runs`                | Per-model run results with status and timing                                |
+| `GET`  | `/observability/{tenant}/tests`               | Test results with pass/fail status and messages                             |
+| `GET`  | `/observability/{tenant}/identity-resolution` | Identity resolution stats: total users, resolved customers, resolution rate |
 
 ### Example: Auto-Inferred Model Detail
 
@@ -467,21 +647,35 @@ curl http://localhost:8001/semantic-layer/tyrell_corp/models/ad_performance
   "label": "Ad Performance",
   "description": "Daily ad spend and engagement metrics across all ad platforms.",
   "dimensions": [
-    {"name": "source_platform", "type": "string", "is_time_dimension": false},
-    {"name": "report_date", "type": "date", "is_time_dimension": true},
-    {"name": "campaign_id", "type": "string", "is_time_dimension": false}
+    { "name": "source_platform", "type": "string", "is_time_dimension": false },
+    { "name": "report_date", "type": "date", "is_time_dimension": true },
+    { "name": "campaign_id", "type": "string", "is_time_dimension": false }
   ],
   "measures": [
-    {"name": "spend", "type": "number", "agg": "sum"},
-    {"name": "impressions", "type": "number", "agg": "sum"},
-    {"name": "clicks", "type": "number", "agg": "sum"}
+    { "name": "spend", "type": "number", "agg": "sum" },
+    { "name": "impressions", "type": "number", "agg": "sum" },
+    { "name": "clicks", "type": "number", "agg": "sum" }
   ],
   "calculated_measures": [
-    {"name": "ctr", "label": "CTR", "sql": "CASE WHEN SUM(impressions) > 0 ...", "format": "percent"},
-    {"name": "cpc", "label": "CPC", "sql": "CASE WHEN SUM(clicks) > 0 ...", "format": "currency"}
+    {
+      "name": "ctr",
+      "label": "CTR",
+      "sql": "CASE WHEN SUM(impressions) > 0 ...",
+      "format": "percent"
+    },
+    {
+      "name": "cpc",
+      "label": "CPC",
+      "sql": "CASE WHEN SUM(clicks) > 0 ...",
+      "format": "currency"
+    }
   ],
   "joins": [
-    {"to": "campaigns", "type": "left", "on": {"campaign_id": "campaign_id"}}
+    {
+      "to": "campaigns",
+      "type": "left",
+      "on": { "campaign_id": "campaign_id" }
+    }
   ]
 }
 ```
@@ -492,87 +686,131 @@ All of this was auto-generated from the star schema — no YAML config required.
 
 ## Tenants
 
-| Tenant | Paid Ads | Ecommerce | Analytics |
-|:-------|:---------|:----------|:----------|
-| Tyrell Corporation | Facebook Ads, Google Ads, Instagram Ads | Shopify | Google Analytics |
-| Wayne Enterprises | Bing Ads, Google Ads | BigCommerce | Google Analytics |
-| Stark Industries | Facebook Ads, Instagram Ads | WooCommerce | Mixpanel |
+| Tenant             | Paid Ads                                | Ecommerce   | Analytics        |
+| :----------------- | :-------------------------------------- | :---------- | :--------------- |
+| Tyrell Corporation | Facebook Ads, Google Ads, Instagram Ads | Shopify     | Google Analytics |
+| Wayne Enterprises  | Bing Ads, Google Ads                    | BigCommerce | Google Analytics |
+| Stark Industries   | Facebook Ads, Instagram Ads             | WooCommerce | Mixpanel         |
 
-Each tenant's configuration lives in `tenants.yaml`, which defines enabled sources, mock data generation parameters, and table-level logic (conversion events, funnel steps, attribution models). All three tenants have fully operational pipelines — 18 star schema tables total (6 per tenant), all passing, all queryable via the BSL semantic layer.
+Each tenant's configuration lives in `tenants.yaml`, which defines enabled
+sources, mock data generation parameters, and table-level logic (conversion
+events, funnel steps, attribution models). All three tenants have fully
+operational pipelines — 18 star schema tables total (6 per tenant), all passing,
+all queryable via the BSL semantic layer.
 
 ---
 
 ## Model Inventory
 
-| Layer | Count | Description |
-|:------|:------|:------------|
-| Sources | auto-generated | `_sources.yml` shims pointing at raw landed tables |
-| Staging | auto-generated | Views that bundle columns into `raw_data_payload` JSON, fire `sync_to_master_hub()` post-hook |
-| Master Models | 31 | Multi-tenant sink tables, one per connector object (e.g., `platform_mm__shopify_api_v1_orders`) |
-| Hubs + Satellites | 4 | Config history, schema history, key registry, current source configs |
-| Platform Ops | 6 | Master model registry, schema hash registry, BSL catalog, BSL column catalog, source candidate registry |
-| Observability | 9 | Run results, test results, model definitions, lineage, freshness, identity resolution, semantic readiness |
-| Intermediate | 20 | Tenant-isolated extractions from JSON (8 Tyrell, 6 Wayne, 6 Stark) |
-| Analytics | 18 | Star schema tables (6 per tenant: 4 facts + 2 dimensions) |
-| **Total** | **136** | **133 PASS on full `dbt run`** |
+| Layer             | Count          | Description                                                                                               |
+| :---------------- | :------------- | :-------------------------------------------------------------------------------------------------------- |
+| Sources           | auto-generated | `_sources.yml` shims pointing at raw landed tables                                                        |
+| Staging           | auto-generated | Views that bundle columns into `raw_data_payload` JSON, fire `sync_to_master_hub()` post-hook             |
+| Master Models     | 31             | Multi-tenant sink tables, one per connector object (e.g., `platform_mm__shopify_api_v1_orders`)           |
+| Hubs + Satellites | 4              | Config history, schema history, key registry, current source configs                                      |
+| Platform Ops      | 6              | Master model registry, schema hash registry, BSL catalog, BSL column catalog, source candidate registry   |
+| Observability     | 9              | Run results, test results, model definitions, lineage, freshness, identity resolution, semantic readiness |
+| Intermediate      | 20             | Tenant-isolated extractions from JSON (8 Tyrell, 6 Wayne, 6 Stark)                                        |
+| Analytics         | 18             | Star schema tables (6 per tenant: 4 facts + 2 dimensions)                                                 |
+| **Total**         | **136**        | **133 PASS on full `dbt run`**                                                                            |
 
 ---
 
 ## Supported Connectors
 
-The connector catalog defines 13 data sources across 3 domains. Each connector maps to a `master_model_id` that determines which master model table receives its data.
+The connector catalog defines 13 data sources across 3 domains. Each connector
+maps to a `master_model_id` that determines which master model table receives
+its data.
 
 ### Paid Advertising (7)
-| Connector | API Version | Objects |
-|:----------|:------------|:--------|
-| Facebook Ads | v19 | ads, ad_sets, campaigns, facebook_insights |
-| Instagram Ads | v19 | ads, ad_sets, campaigns, facebook_insights |
-| Google Ads | v16 | ads, ad_groups, ad_performance, campaigns, customers |
-| Bing Ads | v13 | campaigns, ad_groups, ads, account_performance_report |
-| LinkedIn Ads | v202401 | campaigns, ad_analytics, ad_analytics_by_campaign |
-| Amazon Ads | v3 | sponsored_products campaigns/ad_groups/product_ads |
-| TikTok Ads | v1.3 | campaigns, ad_groups, ads, ads_reports_daily |
+
+| Connector     | API Version | Objects                                               |
+| :------------ | :---------- | :---------------------------------------------------- |
+| Facebook Ads  | v19         | ads, ad_sets, campaigns, facebook_insights            |
+| Instagram Ads | v19         | ads, ad_sets, campaigns, facebook_insights            |
+| Google Ads    | v16         | ads, ad_groups, ad_performance, campaigns, customers  |
+| Bing Ads      | v13         | campaigns, ad_groups, ads, account_performance_report |
+| LinkedIn Ads  | v202401     | campaigns, ad_analytics, ad_analytics_by_campaign     |
+| Amazon Ads    | v3          | sponsored_products campaigns/ad_groups/product_ads    |
+| TikTok Ads    | v1.3        | campaigns, ad_groups, ads, ads_reports_daily          |
 
 ### Ecommerce (3)
-| Connector | API Version | Objects |
-|:----------|:------------|:--------|
-| Shopify | v1 | orders, products |
-| BigCommerce | v3 | orders, products |
-| WooCommerce | v3 | orders, products |
+
+| Connector   | API Version | Objects          |
+| :---------- | :---------- | :--------------- |
+| Shopify     | v1          | orders, products |
+| BigCommerce | v3          | orders, products |
+| WooCommerce | v3          | orders, products |
 
 ### Analytics (3)
-| Connector | API Version | Objects |
-|:----------|:------------|:--------|
-| Google Analytics | GA4 v1 | events |
-| Amplitude | v2 | events, users |
-| Mixpanel | v2 | events, people |
 
-Facebook Ads and Instagram Ads share the same `master_model_id` (`facebook_ads_api_v1`) because they use the same Meta API. They are differentiated at the intermediate layer via `source_platform` filters.
+| Connector        | API Version | Objects        |
+| :--------------- | :---------- | :------------- |
+| Google Analytics | GA4 v1      | events         |
+| Amplitude        | v2          | events, users  |
+| Mixpanel         | v2          | events, people |
+
+Facebook Ads and Instagram Ads share the same `master_model_id`
+(`facebook_ads_api_v1`) because they use the same Meta API. They are
+differentiated at the intermediate layer via `source_platform` filters.
 
 ---
 
 ## Key Architectural Decisions
 
 ### Why `raw_data_payload` in Master Models
-Every master model stores the original source data as a JSON column alongside metadata. This means:
+
+Every master model stores the original source data as a JSON column alongside
+metadata. This means:
+
 - Intermediate models can extract any field without re-ingesting from the source
-- If business logic changes in `tenants.yaml` (e.g., new conversion event), the reporting layer rebuilds from JSON — the logic version changes in the satellite, and `dbt run` applies the new logic to all historical data
-- Schema evolution doesn't break existing extractions — new fields appear in the JSON automatically
+- If business logic changes in `tenants.yaml` (e.g., new conversion event), the
+  reporting layer rebuilds from JSON — the logic version changes in the
+  satellite, and `dbt run` applies the new logic to all historical data
+- Schema evolution doesn't break existing extractions — new fields appear in the
+  JSON automatically
 
 ### Why Tenant Isolation at the Intermediate Layer (Not Earlier)
-Master models are multi-tenant by design — they pool all tenants' data for a given source object. Tenant isolation happens at the intermediate layer via `WHERE tenant_slug = '{tenant}'`. This keeps master models simple (one per source object, not one per tenant x source) while ensuring the analytics layer only sees its own data.
+
+Master models are multi-tenant by design — they pool all tenants' data for a
+given source object. Tenant isolation happens at the intermediate layer via
+`WHERE tenant_slug = '{tenant}'`. This keeps master models simple (one per
+source object, not one per tenant x source) while ensuring the analytics layer
+only sees its own data.
 
 ### Why Engines and Factories (Not Unified Models)
-An earlier implementation attempted unified multi-tenant models (`int_unified_ad_performance`) that used CASE statements across all tenants. This broke tenant isolation and created brittle cross-tenant dependencies. The engine/factory pattern isolates each source's normalization logic in a standalone macro, and the factory simply UNIONs whichever engines a tenant has enabled.
+
+An earlier implementation attempted unified multi-tenant models
+(`int_unified_ad_performance`) that used CASE statements across all tenants.
+This broke tenant isolation and created brittle cross-tenant dependencies. The
+engine/factory pattern isolates each source's normalization logic in a
+standalone macro, and the factory simply UNIONs whichever engines a tenant has
+enabled.
 
 ### Why Config-Driven Shell Models
-Shell models read their source lists from `dbt_project.yml` vars (populated from `tenants.yaml`) rather than hardcoding platform lists. Adding a new source to a tenant means updating config — no SQL changes needed in the analytics layer.
+
+Shell models read their source lists from `dbt_project.yml` vars (populated from
+`tenants.yaml`) rather than hardcoding platform lists. Adding a new source to a
+tenant means updating config — no SQL changes needed in the analytics layer.
 
 ### Why Schema Fingerprint Routing (Not Naming Conventions)
-The `connector_blueprints` registry maps MD5 hashes of physical column structures to master model IDs. This means routing decisions are based on what a table actually looks like, not what it's named. If a connector API changes and produces different columns, the hash changes, and the router either matches a known blueprint or flags the table as unknown — preventing silent data corruption from schema drift.
+
+The `connector_blueprints` registry maps MD5 hashes of physical column
+structures to master model IDs. This means routing decisions are based on what a
+table actually looks like, not what it's named. If a connector API changes and
+produces different columns, the hash changes, and the router either matches a
+known blueprint or flags the table as unknown — preventing silent data
+corruption from schema drift.
 
 ### Why Auto-Inference Over Static Config
-YAML semantic configs don't scale for self-service onboarding. When a user signs up and selects their source mix, the platform needs to serve a complete semantic layer immediately — no human in the loop writing dimension/measure definitions. The `platform_ops__bsl_column_catalog` dbt model classifies columns deterministically in SQL, and the Python layer infers calculated measures and joins from column patterns. YAML configs remain as optional overrides for power users who want custom descriptions or non-standard aggregations.
+
+YAML semantic configs don't scale for self-service onboarding. When a user signs
+up and selects their source mix, the platform needs to serve a complete semantic
+layer immediately — no human in the loop writing dimension/measure definitions.
+The `platform_ops__bsl_column_catalog` dbt model classifies columns
+deterministically in SQL, and the Python layer infers calculated measures and
+joins from column patterns. YAML configs remain as optional overrides for power
+users who want custom descriptions or non-standard aggregations.
 
 ---
 
@@ -671,11 +909,14 @@ gata-platform/
 ## Development
 
 ### Prerequisites
-- Python 3.11+ with [uv](https://github.com/astral-sh/uv) for dependency management
+
+- Python 3.11+ with [uv](https://github.com/astral-sh/uv) for dependency
+  management
 - Deno 1.40+ for the frontend app
 - DuckDB CLI (optional, for local exploration)
 - Ollama (optional — for natural language queries via `POST /ask`)
-- MotherDuck account (optional — only needed for `dev` target, set `MOTHERDUCK_TOKEN` in `.env`)
+- MotherDuck account (optional — only needed for `dev` target, set
+  `MOTHERDUCK_TOKEN` in `.env`)
 
 ### Running the Pipeline (Sandbox — No External Dependencies)
 
@@ -743,20 +984,26 @@ uv run python -m pytest test_bsl_query.py test_bsl_agent.py -v
 ```
 
 ### Running the Frontend
+
 ```bash
 cd app
 deno task start
 ```
 
 ### Adding a New Tenant
-1. Add tenant config to `tenants.yaml` with enabled sources and table-level logic
-2. Run `scripts/onboard_tenant.py <slug> --target sandbox` to scaffold source/staging models
+
+1. Add tenant config to `tenants.yaml` with enabled sources and table-level
+   logic
+2. Run `scripts/onboard_tenant.py <slug> --target sandbox` to scaffold
+   source/staging models
 3. Shell models in `models/analytics/{slug}/` are auto-generated based on config
 4. Run `dbt run` to materialize the full pipeline
 5. The BSL semantic layer auto-populates — no YAML config needed
-6. API immediately serves dimensions, measures, calculated measures, and joins for the new tenant
+6. API immediately serves dimensions, measures, calculated measures, and joins
+   for the new tenant
 
 ### Adding a New Connector
+
 1. Add connector definition to `supported_connectors.yaml`
 2. Create Pydantic schema in `services/mock-data-engine/schemas/`
 3. Create mock data generator in `services/mock-data-engine/sources/{domain}/`
@@ -770,21 +1017,40 @@ deno task start
 
 ### Completed
 
-- **Data Pipeline** — Full ingestion, transformation, and star schema generation for 3 tenants across 13 connectors. 136 dbt models, 133 PASS.
-- **Observability** — Self-describing DAG with run/test results, lineage tracing, identity resolution stats, and semantic readiness checks. Served via API.
-- **Query Builder** — Structured semantic queries compiled to SQL with field validation, join enforcement, and parameterized execution.
-- **BSL Auto-Population** — Zero-config semantic layer that reads the star schema catalog and auto-infers dimensions, measures, calculated measures, and joins.
-- **Natural Language Queries** — Ollama LLM agent with BSL Tools integration, ECharts visualization generation, and keyword fallback.
-- **Frontend Connected Mode** — Dashboard router that loads live catalog from API, adapts BSL metadata to frontend format, and renders visualizations.
+- **Data Pipeline** — Full ingestion, transformation, and star schema generation
+  for 3 tenants across 13 connectors. 136 dbt models, 133 PASS.
+- **Observability** — Self-describing DAG with run/test results, lineage
+  tracing, identity resolution stats, and semantic readiness checks. Served via
+  API.
+- **Query Builder** — Structured semantic queries compiled to SQL with field
+  validation, join enforcement, and parameterized execution.
+- **BSL Auto-Population** — Zero-config semantic layer that reads the star
+  schema catalog and auto-infers dimensions, measures, calculated measures, and
+  joins.
+- **Natural Language Queries** — Ollama LLM agent with BSL Tools integration,
+  ECharts visualization generation, and keyword fallback.
+- **Frontend Connected Mode** — Dashboard router that loads live catalog from
+  API, adapts BSL metadata to frontend format, and renders visualizations.
 
 ### Next
 
-- **WebLLM Ibis Prompt Refinement** — In connected mode, WebLLM acts as a prompt refiner (not executor): generates Ibis-format context hints sent to `POST /ask` instead of raw SQL. Makes the Ollama agent more accurate by providing structured model/dimension/measure intent.
-- **DuckDB WASM Local Enrichment** — Upload CSV/Parquet files, load into DuckDB WASM alongside star schema data from the backend, and JOIN local files with platform data for ad-hoc enrichment.
-- **dlt Lineage Integration** — Link dlt load IDs through observability models for end-to-end lineage (dlt load -> staging -> intermediate -> analytics). Use dlt schema metadata for automated drift detection.
+- **WebLLM Ibis Prompt Refinement** — In connected mode, WebLLM acts as a prompt
+  refiner (not executor): generates Ibis-format context hints sent to
+  `POST /ask` instead of raw SQL. Makes the Ollama agent more accurate by
+  providing structured model/dimension/measure intent.
+- **DuckDB WASM Local Enrichment** — Upload CSV/Parquet files, load into DuckDB
+  WASM alongside star schema data from the backend, and JOIN local files with
+  platform data for ad-hoc enrichment.
+- **dlt Lineage Integration** — Link dlt load IDs through observability models
+  for end-to-end lineage (dlt load -> staging -> intermediate -> analytics). Use
+  dlt schema metadata for automated drift detection.
 
 ---
 
 ## Documentation
 
-- [Roadmap](docs/roadmap.md) — BSL implementation plan with architecture diagrams and file-level detail
+- [Roadmap](docs/roadmap.md) — BSL implementation plan with architecture
+  diagrams and file-level detail
+- [Technical Walkthrough (v2.5)](file:///C:/Users/yalel/.gemini/antigravity/brain/1acf416d-b429-420c-9a38-b5d95f310f3d/walkthrough.md)
+  — Detailed breakdown of Phases 1-4 (Onboarding, Readiness, Dynamic UI, Hybrid
+  Query)

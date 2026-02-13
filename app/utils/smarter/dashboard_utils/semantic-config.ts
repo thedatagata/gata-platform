@@ -1,7 +1,6 @@
-import sessionsMetadataJson from "../../../static/smarter/semantic-sessions-metadata.json" with { type: "json" };
-import usersMetadataJson from "../../../static/smarter/semantic-users-metadata.json" with { type: "json" };
 import { SemanticLayer } from "../../system/semantic-profiler.ts";
-
+import { createPlatformAPIClient } from "../../api/platform-api-client.ts";
+import { adaptBSLModelToSemanticMetadata } from "../../api/bsl-config-adapter.ts";
 
 // Type definitions for semantic metadata
 export interface SemanticMetadata {
@@ -54,27 +53,44 @@ export function registerCustomMetadata(metadata: SemanticLayer | SemanticMetadat
 }
 
 /**
- * Get semantic metadata for a table
+ * Get semantic metadata for a table (Synchronous - from cache only)
+ * NOTE: For dynamic fetching, use fetchSemanticMetadata
  */
 export function getSemanticMetadata(table?: string): SemanticMetadata {
   const selectedTable = table || "sessions";
-  if (selectedTable === "sessions") return sessionsMetadataJson as unknown as SemanticMetadata;
-  if (selectedTable === "users") return usersMetadataJson as unknown as SemanticMetadata;
   
-  // Check custom cache
   if (customMetadataCache[selectedTable]) {
     return customMetadataCache[selectedTable];
   }
 
-  // Fallback to sessions if not found but requested
-  return sessionsMetadataJson as unknown as SemanticMetadata;
+  // Fallback / Error
+  console.warn(`[Config] Metadata for ${selectedTable} not found in cache. Ensure fetchSemanticMetadata is called first.`);
+  return { table: selectedTable, description: "Not Loaded", fields: {}, dimensions: {}, measures: {} };
+}
+
+/**
+ * Fetch semantic metadata from backend and cache it
+ */
+export async function fetchSemanticMetadata(tenantSlug: string, modelName: string): Promise<SemanticMetadata> {
+  if (customMetadataCache[modelName]) return customMetadataCache[modelName];
+
+  try {
+     const client = createPlatformAPIClient();
+     const modelDetail = await client.getModelDetail(tenantSlug, modelName);
+     const metadata = adaptBSLModelToSemanticMetadata(modelDetail);
+     registerCustomMetadata(metadata);
+     return metadata;
+  } catch (err) {
+     console.error(`Failed to fetch metadata for ${modelName}`, err);
+     throw err;
+  }
 }
 
 /**
  * Get all table names that have semantic metadata
  */
 export function getAllRegisteredTables(): string[] {
-  return ["sessions", "users", ...Object.keys(customMetadataCache)];
+  return Object.keys(customMetadataCache);
 }
 
 

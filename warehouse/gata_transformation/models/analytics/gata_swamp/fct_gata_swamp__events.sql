@@ -1,0 +1,1 @@
+{{ build_fct_events('gata_swamp') }}

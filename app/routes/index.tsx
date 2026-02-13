@@ -1,39 +1,25 @@
-import { Handlers, PageProps } from "$fresh/server.ts";
+import { Head } from "$fresh/runtime.ts";
 import Nav from "../components/Nav.tsx";
 import GataFooter from "../components/GataFooter.tsx";
 import HeroFeature from "../islands/HeroFeature.tsx";
+import PlatformCapabilities from "../islands/PlatformCapabilities.tsx";
 import ExperienceSection from "../islands/ExperienceSection.tsx";
-import ContextSwitcher from "../islands/ContextSwitcher.tsx";
 
-interface LandingData {
-  ldClientId?: string;
-}
-
-export const handler: Handlers<LandingData> = {
-  GET(_req, ctx) {
-    const ldClientId = Deno.env.get("LAUNCHDARKLY_CLIENT_ID");
-    return ctx.render({ ldClientId });
-  },
-};
-
-export default function Home({ data }: PageProps<LandingData>) {
-  const { ldClientId } = data;
-
+export default function Home() {
   return (
     <div class="relative min-h-screen bg-gata-dark">
+      <Head>
+        <title>DATA_GATA | Modern Data Architecture</title>
+      </Head>
       <Nav />
-      
+
       <main>
-        <HeroFeature _ldClientId={ldClientId} />
-        
-        {/* Track Record Section */}
+        <HeroFeature />
+        <PlatformCapabilities />
         <ExperienceSection />
       </main>
 
       <GataFooter />
-
-      {/* Debug Tool for LaunchDarkly Experiments */}
-      {ldClientId && <ContextSwitcher ldClientId={ldClientId} />}
     </div>
   );
 }

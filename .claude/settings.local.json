@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(ls \"C:\\\\Users\\\\yalel\\\\OneDrive\\\\Desktop\\\\swamp_life\\\\gata-platform\\\\app\\\\utils\\\\api\"\" 2>/dev/null || echo \"Directory does not exist \")",
+      "Bash(python:*)",
+      "Bash(findstr:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

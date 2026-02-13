@@ -1,0 +1,1 @@
+{{ generate_staging_pusher(tenant_slug='gata_swamp', source_name='facebook_ads', schema_hash='dbdfb6bd85ee4a6387f77125b9a94c1e', master_model_id='facebook_ads_api_v1_facebook_insights', source_table='raw_gata_swamp_facebook_ads_facebook_insights') }}

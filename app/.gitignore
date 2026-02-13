@@ -82,9 +82,6 @@ coverage/
 .pnp.*
 .yarn/
 
-# LaunchDarkly local data
-.launchdarkly/local.json
-
 # Misc
 .cache/
 

@@ -44,7 +44,6 @@ export const handler: Handlers = {
         user = await createUser(username, {
           email,
           googleId,
-          plan_tier: "free",
         });
       }
 

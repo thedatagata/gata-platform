@@ -8,9 +8,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # LaunchDarkly
-      - LAUNCHDARKLY_SDK_KEY=${LAUNCHDARKLY_SDK_KEY:-}
-
       # OAuth Configuration
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -57,7 +54,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - LAUNCHDARKLY_SDK_KEY=${LAUNCHDARKLY_SDK_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN}

@@ -40,21 +40,11 @@ export class WebLLMSemanticHandler {
   constructor(
     private semanticTables: Record<string, SemanticReportObj>,
     tier: "3b" | "7b" = "3b",
-    private ldClient?: { variation: (key: string, defaultValue: unknown) => unknown; track: (event: string, meta: unknown) => void }
   ) {
-    let selectedTier: "3b" | "7b" = tier;
-    
-    if (ldClient) {
-      const flagTier = ldClient.variation("smarter-model-tier", tier);
-      if (flagTier === "3b" || flagTier === "7b") {
-        selectedTier = flagTier;
-      }
-    }
-
-    this.modelId = WebLLMSemanticHandler.MODEL_TIERS[selectedTier];
+    this.modelId = WebLLMSemanticHandler.MODEL_TIERS[tier];
     this.maxTokens = 1000;
     this.temperature = 0.0;
-    this.useValidation = selectedTier === "3b";
+    this.useValidation = tier === "3b";
   }
 
   public registerTable(tableName: string, reportObj: SemanticReportObj) {
@@ -69,9 +59,7 @@ export class WebLLMSemanticHandler {
       },
     });
     const loadTime = performance.now() - startTime;
-    if (this.ldClient) {
-      this.ldClient.track("performance", { type: "metric", context: "webllm_init", value: loadTime });
-    }
+    console.log(`[WebLLM] Model loaded in ${Math.round(loadTime)}ms`);
   }
 
   async generateQuery(userPrompt: string, preferredTable: string = "sessions", contextQueries: PinnedItem[] = []): Promise<{
@@ -88,12 +76,7 @@ export class WebLLMSemanticHandler {
       totalTimeMs: 0
     };
 
-    let shouldValidate = this.useValidation;
-    if (this.ldClient) {
-      const strategy = this.ldClient.variation("query-validation-strategy", "adaptive") as string;
-      if (strategy === "strict") shouldValidate = true;
-      else if (strategy === "fast") shouldValidate = false;
-    }
+    const shouldValidate = this.useValidation;
 
     const validator = createQueryValidator(preferredTable);
     let sql = "";
@@ -225,5 +208,101 @@ Return a JSON object: {"sql": "...", "explanation": "..."}`;
       temperature: 0.3, max_tokens: 500
     });
     return completion.choices[0].message.content;
+  }
+
+  /**
+   * Generates a structured semantic query request for the backend BSL Agent.
+   * Pass 1 of the Hybrid Execution Flow.
+   */
+  async generateSemanticRequest(
+    userPrompt: string,
+    modelName: string,
+    contextQueries: PinnedItem[] = []
+  ): Promise<any> {
+    
+    // We expect the LLM to return a JSON object matching SemanticQueryRequest
+    // interface SemanticQueryRequest {
+    //   model: string;
+    //   dimensions: string[];
+    //   measures: string[];
+    //   calculated_measures: string[];
+    //   filters: QueryFilter[];
+    //   joins: string[];
+    //   order_by: OrderByClause[];
+    //   limit: number | null;
+    // }
+
+    const contextPrompt = generateSQLPrompt(modelName); // Reusing this for table context, but we want JSON output
+    
+    let historyContext = "";
+    if (contextQueries && contextQueries.length > 0) {
+      historyContext = "\n###  RELEVANT ANALYTICAL HISTORY:\n" + 
+        contextQueries.slice(0, 5).map((q) => `- Goal: "${q.prompt}"\n`).join("\n");
+    }
+
+    const fullPrompt = `You are a specialized Semantic Query Generator. Your goal is to map natural language to a structured JSON query object for the "${modelName}" model.
+    
+    ${contextPrompt.replace('RETURN A JSON OBJECT WITH:', '')}
+
+    ### DATA MODEL CONTEXT
+    Table: ${modelName}
+
+    ### OUTPUT FORMAT
+    Return ONLY a valid JSON object with this exact schema:
+    {
+      "model": "${modelName}",
+      "dimensions": ["dimension_alias_1", "dimension_alias_2"],
+      "measures": ["measure_alias_1"],
+      "filters": [
+        { "field": "dimension_alias", "op": "=", "value": "some_value" },
+        { "field": "date_column", "op": ">=", "value": "2023-01-01" }
+      ],
+      "order_by": [
+        { "field": "measure_alias_1", "dir": "desc" }
+      ],
+      "limit": 100
+    }
+
+    ### RULES
+    1. Use ONLY the alias names provided in the mapping.
+    2. For "last X days", calculate the specific date string (e.g. '2023-10-01') relative to TODAY, or use a relative filter if supported. (Prefer ISO dates).
+    3. Op can be =, !=, >, <, >=, <=, like, in.
+    4. If the user asks for a time trend, include the date dimension in "dimensions".
+    5. Always limit to 100 unless specified otherwise.
+
+    ${historyContext}
+
+    User request: "${userPrompt}"
+    
+    JSON Output:`;
+
+    const completion = await this.engine.chat.completions.create({
+      messages: [
+        { role: "system", content: "You are a specialized Semantic Query Generator. Return ONLY valid JSON." },
+        { role: "user", content: fullPrompt }
+      ],
+      temperature: 0.1,
+      max_tokens: this.maxTokens,
+    });
+
+    const rawResponse = completion.choices[0].message.content.trim();
+    
+    try {
+      const jsonMatch = rawResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/i) || [null, rawResponse];
+      const parsed = JSON.parse(jsonMatch[1] || rawResponse);
+      
+      // Enforce model name
+      parsed.model = modelName;
+      // Ensure arrays
+      if (!parsed.dimensions) parsed.dimensions = [];
+      if (!parsed.measures) parsed.measures = [];
+      if (!parsed.filters) parsed.filters = [];
+      if (!parsed.order_by) parsed.order_by = [];
+      
+      return parsed;
+    } catch (_e) {
+      console.error("Failed to parse semantic request JSON", rawResponse);
+      throw new Error("Failed to generate valid semantic query JSON");
+    }
   }
 }

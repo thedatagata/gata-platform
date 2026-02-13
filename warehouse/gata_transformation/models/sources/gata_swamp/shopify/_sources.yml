@@ -1,0 +1,8 @@
+sources:
+- database: my_db
+  name: gata_swamp_shopify
+  schema: gata_swamp
+  tables:
+  - name: raw_gata_swamp_shopify_orders
+  - name: raw_gata_swamp_shopify_products
+version: 2

@@ -1,0 +1,7 @@
+sources:
+- database: my_db
+  name: gata_swamp_google_analytics
+  schema: gata_swamp
+  tables:
+  - name: raw_gata_swamp_google_analytics_events
+version: 2

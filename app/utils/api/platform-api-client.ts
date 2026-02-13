@@ -127,6 +127,14 @@ export interface BSLConfig {
 }
 
 
+export interface ReadinessStatus {
+  is_ready: boolean;
+  last_load_id: string | null;
+  status: 'starting' | 'ingesting' | 'modeling' | 'cataloging' | 'ready' | 'error';
+  message?: string;
+  last_dbt_status?: string;
+}
+
 // --- API Client ---
 
 export class PlatformAPIClient {
@@ -160,6 +168,10 @@ export class PlatformAPIClient {
     }
 
     return response.json();
+  }
+
+  async checkReadiness(tenantSlug: string): Promise<ReadinessStatus> {
+    return this.request<ReadinessStatus>(`readiness/${tenantSlug}`);
   }
 
   async getModels(tenantSlug: string): Promise<ModelSummary[]> {

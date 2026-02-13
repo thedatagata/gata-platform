@@ -6,7 +6,7 @@ import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 export const handler: Handlers = {
   async POST(req) {
     try {
-      const { username, password, email, plan_tier, ai_addon_unlocked, ai_analyst_unlocked } = await req.json();
+      const { username, password, email } = await req.json();
 
       if (!username || !password) {
         return new Response(JSON.stringify({ error: "Username and password required" }), {
@@ -30,9 +30,6 @@ export const handler: Handlers = {
       const user = await createUser(username, {
         passwordHash,
         email,
-        plan_tier: plan_tier || "free",
-        ai_addon_unlocked: ai_addon_unlocked || false,
-        ai_analyst_unlocked: ai_analyst_unlocked || false
       });
 
       // Create session
@@ -49,9 +46,6 @@ export const handler: Handlers = {
           success: true,
           user: {
             username: user.username,
-            plan_tier: user.plan_tier,
-            ai_addon_unlocked: user.ai_addon_unlocked,
-            ai_analyst_unlocked: user.ai_analyst_unlocked
           },
         }),
         { headers }

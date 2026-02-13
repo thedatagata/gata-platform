@@ -1,0 +1,10 @@
+sources:
+- database: my_db
+  name: gata_swamp_facebook_ads
+  schema: gata_swamp
+  tables:
+  - name: raw_gata_swamp_facebook_ads_facebook_insights
+  - name: raw_gata_swamp_facebook_ads_ads
+  - name: raw_gata_swamp_facebook_ads_ad_sets
+  - name: raw_gata_swamp_facebook_ads_campaigns
+version: 2

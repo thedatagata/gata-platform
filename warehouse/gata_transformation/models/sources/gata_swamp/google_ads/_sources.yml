@@ -1,0 +1,11 @@
+sources:
+- database: my_db
+  name: gata_swamp_google_ads
+  schema: gata_swamp
+  tables:
+  - name: raw_gata_swamp_google_ads_customers
+  - name: raw_gata_swamp_google_ads_campaigns
+  - name: raw_gata_swamp_google_ads_ads
+  - name: raw_gata_swamp_google_ads_ad_groups
+  - name: raw_gata_swamp_google_ads_ad_performance
+version: 2

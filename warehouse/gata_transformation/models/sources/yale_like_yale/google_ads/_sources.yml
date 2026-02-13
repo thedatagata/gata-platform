@@ -1,0 +1,11 @@
+sources:
+- database: my_db
+  name: yale_like_yale_google_ads
+  schema: yale_like_yale
+  tables:
+  - name: raw_yale_like_yale_google_ads_customers
+  - name: raw_yale_like_yale_google_ads_campaigns
+  - name: raw_yale_like_yale_google_ads_ads
+  - name: raw_yale_like_yale_google_ads_ad_groups
+  - name: raw_yale_like_yale_google_ads_ad_performance
+version: 2

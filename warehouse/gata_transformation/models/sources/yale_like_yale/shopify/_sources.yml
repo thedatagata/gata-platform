@@ -1,0 +1,8 @@
+sources:
+- database: my_db
+  name: yale_like_yale_shopify
+  schema: yale_like_yale
+  tables:
+  - name: raw_yale_like_yale_shopify_orders
+  - name: raw_yale_like_yale_shopify_products
+version: 2

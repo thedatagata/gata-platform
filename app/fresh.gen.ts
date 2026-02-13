@@ -16,39 +16,40 @@ import * as $api_auth_logout from "./routes/api/auth/logout.ts";
 import * as $api_auth_me from "./routes/api/auth/me.ts";
 import * as $api_auth_risc from "./routes/api/auth/risc.ts";
 import * as $api_auth_signup from "./routes/api/auth/signup.ts";
-import * as $api_demo_check_email from "./routes/api/demo/check-email.ts";
-import * as $api_demo_create_account from "./routes/api/demo/create-account.ts";
 import * as $api_motherduck_token from "./routes/api/motherduck-token.ts";
 import * as $api_onboarding_complete from "./routes/api/onboarding/complete.ts";
+import * as $api_platform_path_ from "./routes/api/platform/[...path].ts";
+import * as $api_platform_readiness_tenant_ from "./routes/api/platform/readiness/[tenant].ts";
 import * as $api_query_approve from "./routes/api/query/approve.ts";
-import * as $api_user_context from "./routes/api/user/context.ts";
 import * as $app_dashboard from "./routes/app/dashboard.tsx";
 import * as $app_index from "./routes/app/index.tsx";
 import * as $app_loading from "./routes/app/loading.tsx";
+import * as $app_onboarding from "./routes/app/onboarding.tsx";
 import * as $auth_google_callback from "./routes/auth/google/callback.ts";
 import * as $auth_google_signin from "./routes/auth/google/signin.ts";
 import * as $auth_signin from "./routes/auth/signin.tsx";
+import * as $demo_index from "./routes/demo/index.tsx";
 import * as $health from "./routes/health.ts";
 import * as $index from "./routes/index.tsx";
 import * as $privacy from "./routes/privacy.tsx";
-import * as $ContextSwitcher from "./islands/ContextSwitcher.tsx";
 import * as $ExperienceSection from "./islands/ExperienceSection.tsx";
 import * as $HeroFeature from "./islands/HeroFeature.tsx";
+import * as $PlatformCapabilities from "./islands/PlatformCapabilities.tsx";
 import * as $admin_AdminLogin from "./islands/admin/AdminLogin.tsx";
 import * as $admin_DemoUserManagement from "./islands/admin/DemoUserManagement.tsx";
-import * as $app_utils_FileUploader from "./islands/app_utils/FileUploader.tsx";
 import * as $app_utils_ScrollToTop from "./islands/app_utils/ScrollToTop.tsx";
 import * as $app_utils_SemanticProfiler from "./islands/app_utils/SemanticProfiler.tsx";
-import * as $auth_AuthModal from "./islands/auth/AuthModal.tsx";
+import * as $app_utils_Toast from "./islands/app_utils/Toast.tsx";
 import * as $auth_LoginFlow from "./islands/auth/LoginFlow.tsx";
 import * as $charts_AutoChart from "./islands/charts/AutoChart.tsx";
 import * as $charts_FunnelChart from "./islands/charts/FunnelChart.tsx";
-import * as $dashboard_shared_WebDataRocksPivot from "./islands/dashboard/shared/WebDataRocksPivot.tsx";
+import * as $dashboard_observability_PipelineHealthDashboard from "./islands/dashboard/observability/PipelineHealthDashboard.tsx";
 import * as $dashboard_smarter_dashboard_CustomDataDashboard from "./islands/dashboard/smarter_dashboard/CustomDataDashboard.tsx";
 import * as $dashboard_smarter_dashboard_SmartDashLoadingPage from "./islands/dashboard/smarter_dashboard/SmartDashLoadingPage.tsx";
 import * as $onboarding_DashboardRouter from "./islands/onboarding/DashboardRouter.tsx";
 import * as $onboarding_DashboardSeeder from "./islands/onboarding/DashboardSeeder.tsx";
-import * as $onboarding_ExperienceGateway from "./islands/onboarding/ExperienceGateway.tsx";
+import * as $onboarding_DemoTenantPicker from "./islands/onboarding/DemoTenantPicker.tsx";
+import * as $onboarding_SourceSelector from "./islands/onboarding/SourceSelector.tsx";
 import type { Manifest } from "$fresh/server.ts";
 
 const manifest = {
@@ -67,43 +68,45 @@ const manifest = {
     "./routes/api/auth/me.ts": $api_auth_me,
     "./routes/api/auth/risc.ts": $api_auth_risc,
     "./routes/api/auth/signup.ts": $api_auth_signup,
-    "./routes/api/demo/check-email.ts": $api_demo_check_email,
-    "./routes/api/demo/create-account.ts": $api_demo_create_account,
     "./routes/api/motherduck-token.ts": $api_motherduck_token,
     "./routes/api/onboarding/complete.ts": $api_onboarding_complete,
+    "./routes/api/platform/[...path].ts": $api_platform_path_,
+    "./routes/api/platform/readiness/[tenant].ts": $api_platform_readiness_tenant_,
     "./routes/api/query/approve.ts": $api_query_approve,
-    "./routes/api/user/context.ts": $api_user_context,
     "./routes/app/dashboard.tsx": $app_dashboard,
     "./routes/app/index.tsx": $app_index,
     "./routes/app/loading.tsx": $app_loading,
+    "./routes/app/onboarding.tsx": $app_onboarding,
     "./routes/auth/google/callback.ts": $auth_google_callback,
     "./routes/auth/google/signin.ts": $auth_google_signin,
     "./routes/auth/signin.tsx": $auth_signin,
+    "./routes/demo/index.tsx": $demo_index,
     "./routes/health.ts": $health,
     "./routes/index.tsx": $index,
     "./routes/privacy.tsx": $privacy,
   },
   islands: {
-    "./islands/ContextSwitcher.tsx": $ContextSwitcher,
     "./islands/ExperienceSection.tsx": $ExperienceSection,
     "./islands/HeroFeature.tsx": $HeroFeature,
+    "./islands/PlatformCapabilities.tsx": $PlatformCapabilities,
     "./islands/admin/AdminLogin.tsx": $admin_AdminLogin,
     "./islands/admin/DemoUserManagement.tsx": $admin_DemoUserManagement,
-    "./islands/app_utils/FileUploader.tsx": $app_utils_FileUploader,
     "./islands/app_utils/ScrollToTop.tsx": $app_utils_ScrollToTop,
     "./islands/app_utils/SemanticProfiler.tsx": $app_utils_SemanticProfiler,
-    "./islands/auth/AuthModal.tsx": $auth_AuthModal,
+    "./islands/app_utils/Toast.tsx": $app_utils_Toast,
     "./islands/auth/LoginFlow.tsx": $auth_LoginFlow,
     "./islands/charts/AutoChart.tsx": $charts_AutoChart,
     "./islands/charts/FunnelChart.tsx": $charts_FunnelChart,
-    "./islands/dashboard/shared/WebDataRocksPivot.tsx": $dashboard_shared_WebDataRocksPivot,
+    "./islands/dashboard/observability/PipelineHealthDashboard.tsx":
+      $dashboard_observability_PipelineHealthDashboard,
     "./islands/dashboard/smarter_dashboard/CustomDataDashboard.tsx":
       $dashboard_smarter_dashboard_CustomDataDashboard,
     "./islands/dashboard/smarter_dashboard/SmartDashLoadingPage.tsx":
       $dashboard_smarter_dashboard_SmartDashLoadingPage,
     "./islands/onboarding/DashboardRouter.tsx": $onboarding_DashboardRouter,
     "./islands/onboarding/DashboardSeeder.tsx": $onboarding_DashboardSeeder,
-    "./islands/onboarding/ExperienceGateway.tsx": $onboarding_ExperienceGateway,
+    "./islands/onboarding/DemoTenantPicker.tsx": $onboarding_DemoTenantPicker,
+    "./islands/onboarding/SourceSelector.tsx": $onboarding_SourceSelector,
   },
   baseUrl: import.meta.url,
 } satisfies Manifest;

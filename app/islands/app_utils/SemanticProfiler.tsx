@@ -1,7 +1,7 @@
 // islands/app_utils/SemanticProfiler.tsx
 import { useState, useEffect } from "preact/hooks";
 import { profileTable, SemanticLayer, SemanticField, getDefaultDimensionsForField, getDefaultMeasuresForField, SemanticFormula } from "../../utils/system/semantic-profiler.ts";
-import { trackPerformance as _trackPerformance } from "../../utils/launchdarkly/events.ts";
+import { createPlatformAPIClient } from "../../utils/api/platform-api-client.ts";
 
 interface SemanticProfilerProps {
   db: unknown;
@@ -9,16 +9,35 @@ interface SemanticProfilerProps {
   webllmEngine?: unknown; // WebLLMSemanticHandler
   onComplete: (config: SemanticLayer) => void;
   onCancel: () => void;
+  tenantSlug?: string;
 }
 
-export default function SemanticProfiler({ db, tableName, webllmEngine, onComplete, onCancel }: SemanticProfilerProps) {
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export default function SemanticProfiler({ db, tableName, webllmEngine, onComplete, onCancel, tenantSlug }: SemanticProfilerProps) {
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<SemanticLayer | null>(null);
-  const [activeTab, setActiveTab] = useState<'setup' | 'fields' | 'dimensions' | 'measures' | 'preview'>('setup');
+  
+  // UI State
+  const [activeTab, setActiveTab] = useState<'setup' | 'fields' | 'dimensions' | 'measures' | 'preview'>('preview');
+  
+  // Split Pane State (for Preview tab)
+  const [splitRatio, _setSplitRatio] = useState(0.6); // 60% Left (Preview), 40% Right (Chat)
+  
+  // Chat State
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [userQuery, setUserQuery] = useState("");
+  const [isChatting, setIsChatting] = useState(false);
+
+  // Preview Data
+  const [previewRows, setPreviewRows] = useState<any[]>([]);
+  
+  // Editor State (Old)
   const [glossary, setGlossary] = useState("");
   const [_aiLoading, setAiLoading] = useState(false);
-
-  // Modal for adding custom fields
   const [showAddModal, setShowAddModal] = useState<'dimension' | 'measure' | null>(null);
   const [newName, setNewName] = useState("");
   const [newAlias, setNewAlias] = useState("");
@@ -27,19 +46,51 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
   useEffect(() => {
     const initProfile = async () => {
       try {
+        setLoading(true);
+        // 1. Fetch live preview from backend if tenantSlug matches
+        let rows: any[] = [];
+        if (tenantSlug) {
+             const client = createPlatformAPIClient();
+             try {
+                const res = await client.executeQuery(tenantSlug, {
+                    model: tableName,
+                    dimensions: [],
+                    measures: [],
+                    calculated_measures: [],
+                    filters: [],
+                    joins: [],
+                    order_by: [],
+                    limit: 100
+                });
+                rows = res.data;
+             } catch (e) {
+                 console.warn("Failed to fetch backend preview, falling back to local query if available", e);
+             }
+        }
+        
+        // 2. Profile the table (Schema inference)
         const draft = await profileTable(db as { query: (s: string) => Promise<unknown> }, tableName);
         setConfig(draft);
+        
         const initialGlossary = Object.entries(draft.fields).map(([name, f]) => `${name}: ${f.description}`).join('\n');
         setGlossary(initialGlossary);
+        
+        if (rows.length > 0) {
+            setPreviewRows(rows);
+            // Insert into local DuckDB for WebLLM to query (Optional/TODO)
+            // For now, we rely on WebLLM having context or just chat logic
+        }
+
       } catch (err) {
         console.error("Profiling failed:", err);
-        alert("Failed to profile table.");
       } finally {
         setLoading(false);
       }
     };
     initProfile();
-  }, [db, tableName]);
+  }, [db, tableName, tenantSlug]);
+
+  // --- Helper Functions (Editor) ---
 
   const applyGlossary = (text: string) => {
     if (!config) return;
@@ -81,7 +132,6 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
       const newDimensions = { ...config.dimensions };
       const newMeasures = { ...config.measures };
       
-      // Clear existing entries for this field before applying defaults
       delete newDimensions[name];
       delete newMeasures[name];
       
@@ -103,7 +153,7 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
     if (showAddModal === 'dimension') {
       updated.dimensions[newName || newAlias] = {
         alias_name: newAlias,
-        transformation: newSQL // e.g. CASE WHEN ...
+        transformation: newSQL 
       };
     } else {
       const targetBase = newName || 'custom_calc';
@@ -118,8 +168,25 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
     setNewName(""); setNewAlias(""); setNewSQL("");
   };
 
-  if (loading) return <div class="p-20 text-center text-gata-green animate-pulse font-mono tracking-widest">PROFILING DATASOURCE...</div>;
-  if (!config) return null;
+  const handleChatParams = async () => {
+      if (!userQuery.trim() || !webllmEngine) return;
+      const q = userQuery;
+      setUserQuery("");
+      setChatHistory(prev => [...prev, { role: 'user', content: q }]);
+      setIsChatting(true);
+
+      try {
+          const response = await (webllmEngine as any).chat(q);
+          setChatHistory(prev => [...prev, { role: 'assistant', content: response }]);
+      } catch (e) {
+          setChatHistory(prev => [...prev, { role: 'assistant', content: "Error processing query." }]);
+      } finally {
+          setIsChatting(false);
+      }
+  };
+
+  if (loading) return <div class="p-20 text-center text-gata-green animate-pulse font-mono tracking-widest">LOADING PREVIEW...</div>;
+  if (!config) return <div class="p-20 text-center text-red-500">Failed to load schema.</div>;
 
   return (
     <div class="flex flex-col h-[85vh] bg-gata-dark border-2 border-gata-green/40 rounded-[2rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
@@ -143,9 +210,11 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
       </nav>
 
       {/* Content */}
-      <div class="flex-1 overflow-y-auto p-8 space-y-8 bg-gradient-to-b from-gata-darker/20 to-transparent">
+      <div class="flex-1 overflow-y-auto bg-gradient-to-b from-gata-darker/20 to-transparent"> 
+        {/* Note: Removed padding from parent to allow split pane to take full width in preview */}
+        
         {activeTab === 'setup' && (
-          <div class="max-w-4xl space-y-8">
+          <div class="p-8 max-w-4xl space-y-8">
             <div class="space-y-3">
               <label class="block text-xs font-black text-gata-green uppercase tracking-widest">Dataset Description</label>
               <textarea value={config.description} onChange={(e) => setConfig({...config, description: (e.target as HTMLTextAreaElement).value})} class="w-full bg-gata-darker border-2 border-gata-green/10 rounded-2xl p-4 text-gata-cream focus:border-gata-green outline-none min-h-[120px]" />
@@ -161,7 +230,7 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
         )}
 
         {activeTab === 'fields' && (
-          <div class="overflow-x-auto rounded-2xl border border-gata-green/10 bg-gata-darker/30">
+          <div class="p-8 overflow-x-auto rounded-2xl border border-gata-green/10 bg-gata-darker/30">
             <table class="w-full text-left">
               <thead>
                 <tr class="text-[10px] font-black text-gata-green uppercase tracking-[0.2em] border-b border-gata-green/10">
@@ -192,7 +261,7 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
         )}
 
         {activeTab === 'dimensions' && (
-          <div class="space-y-8">
+          <div class="p-8 space-y-8">
             <div class="flex justify-between items-center">
               <p class="text-sm text-gata-cream/40 italic">Dimensions define how you slice and dice your metrics.</p>
               <button type="button" onClick={() => setShowAddModal('dimension')} class="bg-gata-green text-gata-dark px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-gata-hover">+ Add Calculated Dimension</button>
@@ -213,7 +282,7 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
         )}
 
         {activeTab === 'measures' && (
-          <div class="space-y-8">
+          <div class="p-8 space-y-8">
             <div class="flex justify-between items-center">
               <p class="text-sm text-gata-cream/40 italic">Measures are the quantifiable numbers your business tracks.</p>
               <button type="button" onClick={() => setShowAddModal('measure')} class="bg-gata-green text-gata-dark px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-gata-hover">+ Add Formula Measure</button>
@@ -254,8 +323,72 @@ export default function SemanticProfiler({ db, tableName, webllmEngine, onComple
         )}
 
         {activeTab === 'preview' && (
-          <div class="space-y-4">
-            <pre class="p-8 bg-gata-darker rounded-[2rem] border-2 border-gata-green/10 font-mono text-xs text-gata-green/90 overflow-x-auto shadow-inner">{JSON.stringify(config, (_k, v) => typeof v === 'bigint' ? Number(v) : v, 2)}</pre>
+          <div class="flex h-full w-full">
+            {/* LEFT PANE: Data Preview (60%) */}
+            <div class="flex flex-col border-r border-gata-green/20" style={{ width: `${splitRatio * 100}%` }}>
+               <div class="flex-1 overflow-auto bg-gata-darker/20 p-4">
+                   {previewRows.length > 0 ? (
+                   <table class="w-full text-left text-xs text-gata-cream/80">
+                       <thead class="sticky top-0 bg-gata-darker shadow-sm z-10">
+                           <tr class="bg-gata-darker">{Object.keys(previewRows[0]).map(k => <th key={k} class="p-3 font-mono text-gata-green min-w-[100px]">{k}</th>)}</tr>
+                       </thead>
+                       <tbody class="divide-y divide-gata-green/5">
+                           {previewRows.map((row, i) => (
+                               <tr key={i} class="hover:bg-gata-green/5 hover:text-white transition-colors">
+                                   {Object.values(row).map((v: any, j) => <td key={j} class="p-3 truncate max-w-[200px]">{String(v)}</td>)}
+                               </tr>
+                           ))}
+                       </tbody>
+                   </table>
+                   ) : (
+                       <div class="flex flex-col items-center justify-center h-full text-gata-cream/30 italic">
+                         <span class="text-4xl mb-4">📊</span>
+                         <p>No preview data available.</p>
+                       </div>
+                   )}
+               </div>
+               <div class="p-2 border-t border-gata-green/10 bg-gata-darker text-[10px] text-gata-green/40 font-mono">
+                 Showing {previewRows.length} rows
+               </div>
+            </div>
+
+            {/* RIGHT PANE: Chat EDA (40%) */}
+            <div class="flex flex-col flex-1 bg-gata-dark">
+               <div class="p-4 border-b border-gata-green/10 bg-gata-darker/50">
+                  <h3 class="text-sm font-black text-gata-green uppercase tracking-widest">AI Analyst</h3>
+               </div>
+               
+               <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                   {chatHistory.length === 0 && (
+                       <div class="text-center py-20 px-8">
+                           <div class="text-4xl mb-4">🤖</div>
+                           <p class="text-gata-cream/40 text-sm">Ask me anything about the data!</p>
+                       </div>
+                   )}
+                   {chatHistory.map((msg, i) => (
+                       <div key={i} class={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                           <div class={`max-w-[90%] p-3 rounded-2xl text-xs ${msg.role === 'user' ? 'bg-gata-green/20 text-gata-green border border-gata-green/20 rounded-tr-sm' : 'bg-gata-darker text-gata-cream/90 border border-white/5 rounded-tl-sm'}`}>
+                               {msg.content}
+                           </div>
+                       </div>
+                   ))}
+                   {isChatting && <div class="text-gata-green text-xs animate-pulse ml-4">Thinking...</div>}
+               </div>
+
+               <div class="p-4 border-t border-gata-green/10 bg-gata-darker/30">
+                   <div class="relative">
+                       <input 
+                          type="text" 
+                          value={userQuery}
+                          onKeyDown={(e) => e.key === 'Enter' && handleChatParams()}
+                          onInput={(e) => setUserQuery((e.target as HTMLInputElement).value)}
+                          placeholder="Ask a question..."
+                          class="w-full bg-gata-dark border border-gata-green/20 rounded-xl py-3 pl-4 pr-12 text-xs text-gata-cream focus:border-gata-green outline-none"
+                       />
+                       <button onClick={handleChatParams} disabled={!userQuery.trim() || isChatting} class="absolute right-2 top-2 p-1.5 text-gata-green hover:bg-gata-green/10 rounded-lg transition-all disabled:opacity-30">↑</button>
+                   </div>
+               </div>
+            </div>
           </div>
         )}
       </div>
