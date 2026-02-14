@@ -15,9 +15,14 @@ Flow:
         2b: Intermediate models (JSON extraction from master models)
         2c: Analytics shell models (factory macro one-liners)
         2d: Update dbt_project.yml tenant_configs
+        2e: Generate BSL semantic config YAML
+        2f: Update selectors.yml with tenant selector
 
     Phase 3 — Run dbt pipeline
         Full run + reporting refresh. BSL column catalog auto-populates.
+
+    Phase 4 — Activate tenant
+        Flips tenant status from 'onboarding' to 'active' in tenants.yaml.
 """
 import pathlib
 import argparse
@@ -290,6 +295,13 @@ INTERMEDIATE_SPECS = {
     ],
 }
 
+# Source category sets for semantic config generation
+AD_SOURCES = {'facebook_ads', 'instagram_ads', 'google_ads', 'bing_ads', 'linkedin_ads', 'amazon_ads', 'tiktok_ads'}
+ECOMMERCE_SOURCES = {'shopify', 'bigcommerce', 'woocommerce'}
+ANALYTICS_SOURCES = {'google_analytics', 'mixpanel', 'amplitude'}
+
+SEMANTIC_CONFIG_DIR = PROJECT_ROOT / "services" / "platform-api" / "semantic_configs"
+
 # Analytics shell models — always the same 6 per tenant
 ANALYTICS_SHELLS = [
     ('fct', 'ad_performance', 'build_fct_ad_performance'),
@@ -506,6 +518,259 @@ def create_analytics_shells(tenant_slug):
 
 
 # ═══════════════════════════════════════════════════════════════
+# PHASE 2e: Generate BSL semantic config YAML
+# ═══════════════════════════════════════════════════════════════
+
+def _build_semantic_models(slug: str) -> list[dict]:
+    """Build the 6 standard semantic model definitions for a tenant."""
+    return [
+        {
+            'name': f'fct_{slug}__ad_performance',
+            'label': 'Ad Performance',
+            'description': 'Daily ad spend and engagement metrics across all ad platforms.',
+            'dimensions': [
+                {'name': 'source_platform', 'type': 'string'},
+                {'name': 'report_date', 'type': 'date'},
+                {'name': 'campaign_id', 'type': 'string'},
+                {'name': 'ad_group_id', 'type': 'string'},
+                {'name': 'ad_id', 'type': 'string'},
+            ],
+            'measures': [
+                {'name': 'spend', 'type': 'number', 'agg': 'sum'},
+                {'name': 'impressions', 'type': 'number', 'agg': 'sum'},
+                {'name': 'clicks', 'type': 'number', 'agg': 'sum'},
+                {'name': 'conversions', 'type': 'number', 'agg': 'sum'},
+            ],
+            'calculated_measures': [
+                {'name': 'ctr', 'label': 'Click-Through Rate',
+                 'sql': 'CASE WHEN SUM(impressions) > 0 THEN SUM(clicks) * 1.0 / SUM(impressions) ELSE 0 END',
+                 'format': 'percent'},
+                {'name': 'cpc', 'label': 'Cost Per Click',
+                 'sql': 'CASE WHEN SUM(clicks) > 0 THEN SUM(spend) / SUM(clicks) ELSE 0 END',
+                 'format': 'currency'},
+                {'name': 'cpm', 'label': 'Cost Per Mille',
+                 'sql': 'CASE WHEN SUM(impressions) > 0 THEN SUM(spend) * 1000.0 / SUM(impressions) ELSE 0 END',
+                 'format': 'currency'},
+            ],
+            'joins': [
+                {'to': f'dim_{slug}__campaigns', 'type': 'left',
+                 'on': {'campaign_id': 'campaign_id', 'source_platform': 'source_platform'}},
+            ],
+        },
+        {
+            'name': f'fct_{slug}__orders',
+            'label': 'Orders',
+            'description': 'Ecommerce transactions with customer and financial details.',
+            'dimensions': [
+                {'name': 'source_platform', 'type': 'string'},
+                {'name': 'order_date', 'type': 'timestamp'},
+                {'name': 'currency', 'type': 'string'},
+                {'name': 'financial_status', 'type': 'string'},
+                {'name': 'customer_email', 'type': 'string'},
+                {'name': 'customer_id', 'type': 'string'},
+            ],
+            'measures': [
+                {'name': 'total_price', 'type': 'number', 'agg': 'sum'},
+                {'name': 'order_id', 'type': 'number', 'agg': 'count_distinct'},
+            ],
+            'calculated_measures': [
+                {'name': 'aov', 'label': 'Average Order Value',
+                 'sql': 'CASE WHEN COUNT(DISTINCT order_id) > 0 THEN SUM(total_price) / COUNT(DISTINCT order_id) ELSE 0 END',
+                 'format': 'currency'},
+            ],
+            'joins': [
+                {'to': f'dim_{slug}__users', 'type': 'left',
+                 'on': {'customer_email': 'customer_email'}},
+            ],
+        },
+        {
+            'name': f'fct_{slug}__sessions',
+            'label': 'Sessions',
+            'description': 'Sessionized web analytics with attribution, duration, and conversion flags.',
+            'dimensions': [
+                {'name': 'source_platform', 'type': 'string'},
+                {'name': 'user_pseudo_id', 'type': 'string'},
+                {'name': 'session_start_ts', 'type': 'timestamp_epoch'},
+                {'name': 'session_end_ts', 'type': 'timestamp_epoch'},
+                {'name': 'traffic_source', 'type': 'string'},
+                {'name': 'traffic_medium', 'type': 'string'},
+                {'name': 'traffic_campaign', 'type': 'string'},
+                {'name': 'geo_country', 'type': 'string'},
+                {'name': 'device_category', 'type': 'string'},
+                {'name': 'is_conversion_session', 'type': 'boolean'},
+            ],
+            'measures': [
+                {'name': 'session_duration_seconds', 'type': 'number', 'agg': 'avg'},
+                {'name': 'events_in_session', 'type': 'number', 'agg': 'avg'},
+                {'name': 'session_revenue', 'type': 'number', 'agg': 'sum'},
+                {'name': 'session_id', 'type': 'string', 'agg': 'count_distinct'},
+            ],
+            'calculated_measures': [
+                {'name': 'conversion_rate', 'label': 'Session Conversion Rate',
+                 'sql': "CASE WHEN COUNT(DISTINCT session_id) > 0 THEN SUM(CASE WHEN is_conversion_session THEN 1 ELSE 0 END) * 1.0 / COUNT(DISTINCT session_id) ELSE 0 END",
+                 'format': 'percent'},
+            ],
+            'joins': [
+                {'to': f'dim_{slug}__users', 'type': 'left',
+                 'on': {'user_pseudo_id': 'user_pseudo_id'}},
+                {'to': f'dim_{slug}__campaigns', 'type': 'left',
+                 'on': {'traffic_campaign': 'campaign_name'}},
+            ],
+        },
+        {
+            'name': f'fct_{slug}__events',
+            'label': 'Events',
+            'description': 'Raw analytics events with attribution and optional ecommerce data.',
+            'dimensions': [
+                {'name': 'source_platform', 'type': 'string'},
+                {'name': 'event_name', 'type': 'string'},
+                {'name': 'event_timestamp', 'type': 'timestamp_epoch'},
+                {'name': 'user_pseudo_id', 'type': 'string'},
+                {'name': 'session_id', 'type': 'string'},
+                {'name': 'order_id', 'type': 'string'},
+                {'name': 'traffic_source', 'type': 'string'},
+                {'name': 'traffic_medium', 'type': 'string'},
+                {'name': 'traffic_campaign', 'type': 'string'},
+                {'name': 'geo_country', 'type': 'string'},
+                {'name': 'device_category', 'type': 'string'},
+            ],
+            'measures': [
+                {'name': 'event_timestamp', 'type': 'number', 'agg': 'count', 'label': 'event_count'},
+                {'name': 'order_total', 'type': 'number', 'agg': 'sum'},
+            ],
+            'joins': [
+                {'to': f'dim_{slug}__users', 'type': 'left',
+                 'on': {'user_pseudo_id': 'user_pseudo_id'}},
+            ],
+        },
+        {
+            'name': f'dim_{slug}__campaigns',
+            'label': 'Campaigns',
+            'description': 'Campaign dimension with name and status across ad platforms.',
+            'dimensions': [
+                {'name': 'source_platform', 'type': 'string'},
+                {'name': 'campaign_id', 'type': 'string'},
+                {'name': 'campaign_name', 'type': 'string'},
+                {'name': 'campaign_status', 'type': 'string'},
+            ],
+            'measures': [],
+            'joins': [],
+        },
+        {
+            'name': f'dim_{slug}__users',
+            'label': 'Users',
+            'description': 'Unified user dimension combining analytics and ecommerce identities.',
+            'dimensions': [
+                {'name': 'source_platform', 'type': 'string'},
+                {'name': 'user_pseudo_id', 'type': 'string'},
+                {'name': 'user_id', 'type': 'string'},
+                {'name': 'customer_email', 'type': 'string'},
+                {'name': 'customer_id', 'type': 'string'},
+                {'name': 'is_customer', 'type': 'boolean'},
+                {'name': 'first_seen_at', 'type': 'timestamp_epoch'},
+                {'name': 'last_seen_at', 'type': 'timestamp_epoch'},
+                {'name': 'first_geo_country', 'type': 'string'},
+                {'name': 'first_device_category', 'type': 'string'},
+            ],
+            'measures': [
+                {'name': 'total_events', 'type': 'number', 'agg': 'sum'},
+                {'name': 'total_sessions', 'type': 'number', 'agg': 'sum'},
+            ],
+            'joins': [],
+        },
+    ]
+
+
+def generate_semantic_config(tenant_slug: str, enabled_sources: list[str], business_name: str = None):
+    """Auto-generate BSL semantic config YAML for the platform API."""
+    config_path = SEMANTIC_CONFIG_DIR / f"{tenant_slug}.yaml"
+    if config_path.exists():
+        print(f"  [SKIP] Semantic config already exists: {config_path.name}")
+        return
+
+    # Resolve business_name: param > tenants.yaml > slugify fallback
+    if not business_name:
+        tenants_path = PROJECT_ROOT / "tenants.yaml"
+        if tenants_path.exists():
+            with open(tenants_path) as f:
+                tenants_cfg = yaml.safe_load(f) or {}
+            for t in tenants_cfg.get('tenants', []):
+                if t.get('slug') == tenant_slug:
+                    business_name = t.get('business_name')
+                    break
+    if not business_name:
+        business_name = tenant_slug.replace('_', ' ').title()
+
+    # Classify sources
+    ads = sorted([s for s in enabled_sources if s in AD_SOURCES])
+    ecommerce = sorted([s for s in enabled_sources if s in ECOMMERCE_SOURCES])
+    analytics = sorted([s for s in enabled_sources if s in ANALYTICS_SOURCES])
+
+    slug = tenant_slug
+
+    config = {
+        'tenant': {
+            'slug': slug,
+            'business_name': business_name,
+            'source_platforms': {
+                'ads': ads,
+                'ecommerce': ecommerce,
+                'analytics': analytics,
+            }
+        },
+        'models': _build_semantic_models(slug)
+    }
+
+    SEMANTIC_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    print(f"  [OK] Semantic config: {config_path.name}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PHASE 2f: Update selectors.yml with tenant selector
+# ═══════════════════════════════════════════════════════════════
+
+def update_selectors_yml(tenant_slug: str):
+    """Add tenant selector to selectors.yml if not already present."""
+    selectors_path = DBT_PROJECT_DIR / "selectors.yml"
+    with open(selectors_path) as f:
+        config = yaml.safe_load(f)
+
+    # Check if selector already exists
+    existing_names = {s['name'] for s in config.get('selectors', [])}
+    if tenant_slug in existing_names:
+        print(f"  [SKIP] Selector for {tenant_slug} already exists")
+        return
+
+    # Find the insertion point — before operational selectors
+    selectors_list = config['selectors']
+    OPERATIONAL_SELECTORS = {'reporting_refresh', 'safe_full_refresh', 'master_models_only'}
+    insert_idx = len(selectors_list)
+    for i, sel in enumerate(selectors_list):
+        if sel['name'] in OPERATIONAL_SELECTORS:
+            insert_idx = i
+            break
+
+    new_selector = {
+        'name': tenant_slug,
+        'definition': {
+            'union': [
+                {'tag': tenant_slug},
+                {'method': 'fqn', 'value': tenant_slug},
+            ]
+        }
+    }
+
+    selectors_list.insert(insert_idx, new_selector)
+
+    with open(selectors_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    print(f"  [OK] Added selector for {tenant_slug}")
+
+
+# ═══════════════════════════════════════════════════════════════
 # PHASE 2d: Update dbt_project.yml tenant_configs
 # ═══════════════════════════════════════════════════════════════
 
@@ -571,6 +836,33 @@ def run_dbt_pipeline(target='dev'):
 
 
 # ═══════════════════════════════════════════════════════════════
+# PHASE 4: Activate tenant
+# ═══════════════════════════════════════════════════════════════
+
+def activate_tenant(tenant_slug: str):
+    """Set tenant status to 'active' in tenants.yaml."""
+    tenants_path = PROJECT_ROOT / "tenants.yaml"
+    with open(tenants_path) as f:
+        config = yaml.safe_load(f)
+
+    for tenant in config.get('tenants', []):
+        if tenant.get('slug') == tenant_slug:
+            if tenant.get('status') == 'active':
+                print(f"  [SKIP] {tenant_slug} already active")
+                return
+            tenant['status'] = 'active'
+            break
+    else:
+        print(f"  [WARN] {tenant_slug} not found in tenants.yaml")
+        return
+
+    with open(tenants_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    print(f"  [OK] Status: {tenant_slug} -> active")
+
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
 
@@ -613,6 +905,13 @@ def onboard(tenant_slug, target='dev', days=30, skip_dbt=False):
     # 2d: Update dbt_project.yml
     update_dbt_project_yml(tenant_slug, enabled_sources)
 
+    # 2e: BSL semantic config YAML
+    generate_semantic_config(tenant_slug, enabled_sources,
+                             business_name=tenant_config.business_name)
+
+    # 2f: Update selectors.yml
+    update_selectors_yml(tenant_slug)
+
     # Phase 3: dbt pipeline
     if skip_dbt:
         print("\n[SKIP] dbt runs (--skip-dbt flag)")
@@ -621,7 +920,16 @@ def onboard(tenant_slug, target='dev', days=30, skip_dbt=False):
     print(f"\n{'='*60}")
     print(f"  PHASE 3: Run dbt pipeline (target={target})")
     print(f"{'='*60}")
-    return run_dbt_pipeline(target)
+    exit_code = run_dbt_pipeline(target)
+
+    # Phase 4: Activate tenant on success
+    if exit_code == 0:
+        print(f"\n{'='*60}")
+        print(f"  PHASE 4: Activate tenant")
+        print(f"{'='*60}")
+        activate_tenant(tenant_slug)
+
+    return exit_code
 
 
 if __name__ == "__main__":

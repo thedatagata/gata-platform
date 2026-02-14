@@ -1,168 +1,168 @@
 tenants:
-  - slug: tyrell_corp
-    business_name: Tyrell Corporation
-    status: onboarding
-    sources:
-      facebook_ads:
-        enabled: true
-        generation:
-          daily_spend_mean: 3000
-          campaign_count: 5
-        tables:
-          - name: ads
-            logic: {}
-          - name: ad_sets
-            logic: {}
-          - name: campaigns
-            logic: {}
-          - name: facebook_insights
-            logic:
-              conversion_event_pattern: purchase
-      google_ads:
-        enabled: true
-        generation:
-          daily_spend_mean: 5000
-          cpc_mean: 2.1
-          campaign_count: 5
-        tables:
-          - name: ads
-            logic: {}
-          - name: ad_groups
-            logic: {}
-          - name: ad_performance
-            logic: {}
-          - name: campaigns
-            logic: {}
-          - name: customers
-            logic: {}
-      instagram_ads:
-        enabled: true
-        generation:
-          daily_spend_mean: 2000
-          campaign_count: 5
-        tables:
-          - name: ads
-            logic: {}
-          - name: ad_sets
-            logic: {}
-          - name: campaigns
-            logic: {}
-          - name: facebook_insights
-            logic:
-              conversion_event_pattern: purchase
-      shopify:
-        enabled: true
-        generation:
-          product_count: 20
-        tables:
-          - name: orders
-            logic: {}
-          - name: products
-            logic: {}
-      google_analytics:
-        enabled: true
-        generation:
-          organic_traffic_ratio: 0.3
-          conversion_rate: 0.02
-        tables:
-          - name: events
-            logic:
-              conversion_events:
-                - purchase
-              funnel_steps:
-                session_start: session_start
-                view_item: view_item
-                add_to_cart: add_to_cart
-                begin_checkout: begin_checkout
-                purchase: purchase
-  - slug: wayne_enterprises
-    business_name: Wayne Enterprises
-    status: onboarding
-    sources:
-      bing_ads:
-        enabled: true
-        generation:
-          campaign_count: 5
-          daily_spend_mean: 300
-        tables:
-          - name: account_performance_report
-            logic:
-              goal: lead_gen
-              target_cpa: 45
-      google_ads:
-        enabled: true
-      bigcommerce:
-        enabled: true
-        generation:
-          daily_order_count: 40
-        tables:
-          - name: orders
-            logic: {}
-          - name: products
-            logic: {}
-      google_analytics:
-        enabled: true
-  - slug: stark_industries
-    business_name: Stark Industries
-    status: onboarding
-    sources:
-      facebook_ads:
-        enabled: true
-        generation:
-          campaign_count: 8
-        tables:
-          - name: facebook_insights
-            logic:
-              attribution_model: last_click
-      instagram_ads:
-        enabled: true
-      woocommerce:
-        enabled: true
-        tables:
-          - name: orders
-            logic: {}
-          - name: products
-            logic: {}
-      mixpanel:
-        enabled: true
-        tables:
-          - name: events
-            logic: {}
-          - name: people
-            logic: {}
-  - slug: demo_tenant
-    business_name: Demo Company
-    status: onboarding
-    sources:
-      shopify:
-        enabled: true
-      google_analytics:
-        enabled: true
-      facebook_ads:
-        enabled: true
-      google_ads:
-        enabled: true
-  - slug: yale_like_yale
-    business_name: Yale Like Yale
-    status: onboarding
-    sources:
-      shopify:
-        enabled: true
-      google_analytics:
-        enabled: true
-      facebook_ads:
-        enabled: true
-      google_ads:
-        enabled: true
-  - slug: gata_swamp
-    business_name: GATA SWAMP
-    status: onboarding
-    sources:
-      shopify:
-        enabled: true
-      google_analytics:
-        enabled: true
-      facebook_ads:
-        enabled: true
-      google_ads:
-        enabled: true
+- slug: tyrell_corp
+  business_name: Tyrell Corporation
+  status: active
+  sources:
+    facebook_ads:
+      enabled: true
+      generation:
+        daily_spend_mean: 3000
+        campaign_count: 5
+      tables:
+      - name: ads
+        logic: {}
+      - name: ad_sets
+        logic: {}
+      - name: campaigns
+        logic: {}
+      - name: facebook_insights
+        logic:
+          conversion_event_pattern: purchase
+    google_ads:
+      enabled: true
+      generation:
+        daily_spend_mean: 5000
+        cpc_mean: 2.1
+        campaign_count: 5
+      tables:
+      - name: ads
+        logic: {}
+      - name: ad_groups
+        logic: {}
+      - name: ad_performance
+        logic: {}
+      - name: campaigns
+        logic: {}
+      - name: customers
+        logic: {}
+    instagram_ads:
+      enabled: true
+      generation:
+        daily_spend_mean: 2000
+        campaign_count: 5
+      tables:
+      - name: ads
+        logic: {}
+      - name: ad_sets
+        logic: {}
+      - name: campaigns
+        logic: {}
+      - name: facebook_insights
+        logic:
+          conversion_event_pattern: purchase
+    shopify:
+      enabled: true
+      generation:
+        product_count: 20
+      tables:
+      - name: orders
+        logic: {}
+      - name: products
+        logic: {}
+    google_analytics:
+      enabled: true
+      generation:
+        organic_traffic_ratio: 0.3
+        conversion_rate: 0.02
+      tables:
+      - name: events
+        logic:
+          conversion_events:
+          - purchase
+          funnel_steps:
+            session_start: session_start
+            view_item: view_item
+            add_to_cart: add_to_cart
+            begin_checkout: begin_checkout
+            purchase: purchase
+- slug: wayne_enterprises
+  business_name: Wayne Enterprises
+  status: active
+  sources:
+    bing_ads:
+      enabled: true
+      generation:
+        campaign_count: 5
+        daily_spend_mean: 300
+      tables:
+      - name: account_performance_report
+        logic:
+          goal: lead_gen
+          target_cpa: 45
+    google_ads:
+      enabled: true
+    bigcommerce:
+      enabled: true
+      generation:
+        daily_order_count: 40
+      tables:
+      - name: orders
+        logic: {}
+      - name: products
+        logic: {}
+    google_analytics:
+      enabled: true
+- slug: stark_industries
+  business_name: Stark Industries
+  status: active
+  sources:
+    facebook_ads:
+      enabled: true
+      generation:
+        campaign_count: 8
+      tables:
+      - name: facebook_insights
+        logic:
+          attribution_model: last_click
+    instagram_ads:
+      enabled: true
+    woocommerce:
+      enabled: true
+      tables:
+      - name: orders
+        logic: {}
+      - name: products
+        logic: {}
+    mixpanel:
+      enabled: true
+      tables:
+      - name: events
+        logic: {}
+      - name: people
+        logic: {}
+- slug: demo_tenant
+  business_name: Demo Company
+  status: onboarding
+  sources:
+    shopify:
+      enabled: true
+    google_analytics:
+      enabled: true
+    facebook_ads:
+      enabled: true
+    google_ads:
+      enabled: true
+- slug: yale_like_yale
+  business_name: Yale Like Yale
+  status: active
+  sources:
+    shopify:
+      enabled: true
+    google_analytics:
+      enabled: true
+    facebook_ads:
+      enabled: true
+    google_ads:
+      enabled: true
+- slug: gata_swamp
+  business_name: GATA SWAMP
+  status: active
+  sources:
+    shopify:
+      enabled: true
+    google_analytics:
+      enabled: true
+    facebook_ads:
+      enabled: true
+    google_ads:
+      enabled: true

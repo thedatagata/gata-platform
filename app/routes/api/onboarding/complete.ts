@@ -81,6 +81,11 @@ export const handler: Handlers = {
 
       process.status.then((status) => {
         console.log(`[ONBOARD] Pipeline for ${tenant_slug} exited with code ${status.code}`);
+        if (status.code === 0) {
+          console.log(`[ONBOARD] ${tenant_slug} activated successfully`);
+        } else {
+          console.error(`[ONBOARD] ${tenant_slug} pipeline failed — tenant remains in onboarding state`);
+        }
       });
 
       return new Response(
