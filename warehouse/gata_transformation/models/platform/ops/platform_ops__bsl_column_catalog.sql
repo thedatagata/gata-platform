@@ -52,6 +52,8 @@ classified AS (
             -- Integer types: disambiguate by column name patterns
             WHEN data_type IN ('BIGINT', 'INTEGER', 'INT', 'SMALLINT', 'TINYINT', 'HUGEINT') THEN
                 CASE
+                    -- Funnel step metrics are counts, not timestamps — check before dimension suffix patterns
+                    WHEN column_name LIKE 'funnel\_%' ESCAPE '\' THEN 'measure'
                     -- Dimension patterns (IDs, keys, names, statuses)
                     WHEN column_name LIKE '%\_id' ESCAPE '\'
                       OR column_name LIKE '%\_key' ESCAPE '\'

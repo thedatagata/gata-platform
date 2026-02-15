@@ -23,11 +23,24 @@ SELECT
     ARG_MIN(geo_country, event_timestamp)        AS geo_country,
     ARG_MIN(device_category, event_timestamp)    AS device_category,
 
-    {% if conversion_events | length > 0 %}
-    MAX(CASE WHEN event_name IN ({% for evt in conversion_events %}'{{ evt }}'{% if not loop.last %}, {% endif %}{% endfor %}) THEN TRUE ELSE FALSE END) AS is_conversion_session,
-    {% else %}
-    FALSE AS is_conversion_session,
-    {% endif %}
+    -- ===== FUNNEL ANALYSIS =====
+    -- Deepest funnel step reached (1-indexed, 0 = no funnel activity)
+    {{ build_funnel_max_step() }} AS funnel_max_step,
+
+    -- Per-step event counts (one column per funnel step)
+    {{ build_funnel_pivot_columns() }},
+
+    -- Conversion event count within session
+    SUM(CASE WHEN event_name IN (
+        {%- for evt in conversion_events %}'{{ evt }}'{% if not loop.last %}, {% endif %}{% endfor -%}
+        {%- if conversion_events | length == 0 %}'__none__'{% endif -%}
+    ) THEN 1 ELSE 0 END) AS funnel_conversion_count,
+
+    -- Boolean conversion flag
+    SUM(CASE WHEN event_name IN (
+        {%- for evt in conversion_events %}'{{ evt }}'{% if not loop.last %}, {% endif %}{% endfor -%}
+        {%- if conversion_events | length == 0 %}'__none__'{% endif -%}
+    ) THEN 1 ELSE 0 END) > 0 AS is_conversion_session,
 
     CAST(0 AS DOUBLE) AS session_revenue,
     CAST(NULL AS VARCHAR) AS transaction_id

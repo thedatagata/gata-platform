@@ -108,6 +108,12 @@ def _classify_column(col_name: str, data_type: str) -> str:
     if data_type in INTEGER_TYPES:
         col_lower = col_name.lower()
 
+        # Funnel step metrics are counts, not timestamps — check before
+        # dimension suffix patterns (avoids funnel_step_1_session_start
+        # matching the "_start" epoch timestamp pattern)
+        if col_lower.startswith("funnel_"):
+            return "measure"
+
         # Check dimension patterns first (IDs, keys, etc.)
         for pattern in DIMENSION_NAME_PATTERNS:
             if pattern in col_lower:
@@ -134,6 +140,9 @@ def _is_epoch_timestamp(col_name: str, data_type: str) -> bool:
     if data_type not in INTEGER_TYPES:
         return False
     col_lower = col_name.lower()
+    # Funnel step metrics are counts, not timestamps — exclude them
+    if col_lower.startswith("funnel_"):
+        return False
     return any(col_lower.endswith(suffix) for suffix in _EPOCH_TIMESTAMP_SUFFIXES)
 
 
