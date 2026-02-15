@@ -936,7 +936,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Onboard a tenant: mock data + scaffolding + dbt")
     parser.add_argument("tenant_slug")
     parser.add_argument("--target", default="dev", choices=["dev", "sandbox", "local"])
-    parser.add_argument("--days", type=int, default=30)
+    parser.add_argument("--days", type=int, default=180)
     parser.add_argument("--skip-dbt", action="store_true", help="Skip dbt runs after scaffolding")
     args = parser.parse_args()
     sys.exit(onboard(args.tenant_slug, args.target, args.days, args.skip_dbt))

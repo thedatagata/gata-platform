@@ -121,6 +121,7 @@ class AskRequest(BaseModel):
     """Natural language analytics question."""
     question: str
     max_records: int = 100
+    semantic_context: str = ""
 
     @field_validator("max_records")
     @classmethod

@@ -264,6 +264,22 @@ def check_readiness(tenant_slug: str):
 # BSL LLM Status Endpoints (before {tenant_slug} routes)
 # ═══════════════════════════════════════════════════════════
 
+@app.get("/health/llm", response_model=LLMProviderStatus)
+def get_llm_health():
+    """Lightweight health check for backend LLM availability.
+
+    Used by the dashboard to determine if conversational analytics
+    can be enabled (requires both WebLLM and backend LLM).
+    """
+    provider = get_llm_provider()
+    return LLMProviderStatus(
+        provider=provider.provider_name,
+        model=provider.model_name,
+        is_available=provider.is_available,
+        error=provider.error_message,
+    )
+
+
 @app.get("/semantic-layer/llm-status", response_model=LLMProviderStatus)
 def get_llm_status():
     """Check the current LLM provider status."""
@@ -574,7 +590,7 @@ def ask_question(tenant_slug: str, request: AskRequest):
     # Validate tenant exists in BSL catalog
     _get_bsl_models(tenant_slug)
 
-    result = bsl_ask(request.question, tenant_slug)
+    result = bsl_ask(request.question, tenant_slug, request.semantic_context)
 
     # Trim records to max_records
     if len(result.records) > request.max_records:

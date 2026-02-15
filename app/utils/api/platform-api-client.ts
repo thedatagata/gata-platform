@@ -117,6 +117,30 @@ export interface IdentityResolutionStats {
   total_sessions: number;
 }
 
+export interface AskRequest {
+  question: string;
+  max_records?: number;
+  semantic_context?: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  records: Record<string, unknown>[];
+  sql: string;
+  chart_spec: Record<string, unknown> | null;
+  model_used: string;
+  provider: string;
+  execution_time_ms: number;
+  tool_calls: string[];
+  error: string | null;
+}
+
+export interface BackendLLMStatus {
+  available: boolean;
+  provider: string;
+  model: string;
+}
+
 export interface BSLConfig {
   tenant: {
     slug: string;
@@ -209,6 +233,28 @@ export class PlatformAPIClient {
 
   async getIdentityResolution(tenantSlug: string): Promise<IdentityResolutionStats> {
     return this.request<IdentityResolutionStats>(`observability/${tenantSlug}/identity-resolution`);
+  }
+
+  async askQuestion(tenantSlug: string, request: AskRequest): Promise<AskResponse> {
+    return this.request<AskResponse>(`semantic-layer/${tenantSlug}/ask`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async checkBackendLLM(): Promise<BackendLLMStatus> {
+    try {
+      const result = await this.request<{ provider: string; model: string; is_available: boolean; error: string }>(
+        "health/llm"
+      );
+      return {
+        available: result.is_available,
+        provider: result.provider,
+        model: result.model,
+      };
+    } catch {
+      return { available: false, provider: "none", model: "" };
+    }
   }
 }
 

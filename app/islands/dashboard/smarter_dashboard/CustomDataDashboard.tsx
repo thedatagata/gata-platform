@@ -1,31 +1,48 @@
 // islands/dashboard/smarter_dashboard/CustomDataDashboard.tsx
 import { useEffect, useState } from "preact/hooks";
-import { createPlatformAPIClient, type ModelSummary, type ModelDetail, type MeasureDef } from "../../../utils/api/platform-api-client.ts";
+import {
+  createPlatformAPIClient,
+  type ModelSummary,
+  type ModelDetail,
+  type MeasureDef,
+  type AskResponse,
+} from "../../../utils/api/platform-api-client.ts";
 import FreshChartsWrapper from "../../../components/charts/FreshChartsWrapper.tsx";
 import type { ChartConfig } from "../../../utils/smarter/autovisualization_dashboard/chart-generator.ts";
 import { generateDashboardChartConfig } from "../../../utils/smarter/autovisualization_dashboard/dashboard-chart-generator.ts";
 import { PinnedItem, loadPinnedItems, savePinnedItem, deletePinnedItem } from "../../../utils/smarter/dashboard_utils/query-persistence.ts";
+import type { PoPMetric } from "../../../utils/smarter/autovisualization_dashboard/webllm-handler.ts";
 
 interface CustomDataDashboardProps {
-  webllmEngine: unknown;
+  webllmEngine: unknown | null;
+  webllmReady: boolean;
+  backendLLMAvailable: boolean;
+  backendLLMProvider: string;
   tenantSlug: string;
   models: ModelSummary[];
   onBack?: () => void;
   onShowObservability?: () => void;
 }
 
-// PoP metric for KPI display
-interface PoPMetric {
-  name: string;
-  label: string;
-  current: number;
-  previous: number;
-  changePercent: number;
-  format: "number" | "currency" | "percentage";
+// Conversation history entry
+interface ConversationEntry {
+  role: "user" | "assistant";
+  prompt?: string;
+  answer?: string;
+  records?: Record<string, unknown>[];
+  chart?: ChartConfig | null;
+  chartSpec?: Record<string, unknown> | null;
+  insights?: string;
+  modelUsed?: string;
+  provider?: string;
+  error?: string;
 }
 
 export default function CustomDataDashboard({
   webllmEngine,
+  webllmReady,
+  backendLLMAvailable,
+  backendLLMProvider,
   tenantSlug,
   models,
   onBack,
@@ -35,11 +52,13 @@ export default function CustomDataDashboard({
   const defaultModel = models.find(m => m.measure_count > 0)?.name || models[0]?.name || "";
   const [selectedModelName, setSelectedModelName] = useState<string>(defaultModel);
   const [modelDetail, setModelDetail] = useState<ModelDetail | null>(null);
+  const [modelDetails, setModelDetails] = useState<Map<string, ModelDetail>>(new Map());
   const [modelLoading, setModelLoading] = useState(true);
 
   // PoP KPI state
   const [popMetrics, setPopMetrics] = useState<PoPMetric[]>([]);
   const [popLoading, setPopLoading] = useState(false);
+  const [kpiInsights, setKpiInsights] = useState("");
 
   // Chat state
   const [prompt, setPrompt] = useState("");
@@ -48,24 +67,29 @@ export default function CustomDataDashboard({
 
   // Results state
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
-  const [kpiResult, setKpiResult] = useState<{ value: number; title: string } | null>(null);
+  const [echartsSpec, setEchartsSpec] = useState<Record<string, unknown> | null>(null);
+  const [backendAnswer, setBackendAnswer] = useState("");
   const [insights, setInsights] = useState("");
-  const [generatedRequest, setGeneratedRequest] = useState("");
+  const [lastProvider, setLastProvider] = useState("");
   const [lastError, setLastError] = useState<string | null>(null);
 
   // Pinned items
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
 
   // Conversation history
-  const [history, setHistory] = useState<Array<{
-    role: "user" | "assistant";
-    prompt?: string;
-    chart?: ChartConfig | null;
-    kpi?: { value: number; title: string } | null;
-    insights?: string;
-    request?: string;
-    error?: string;
-  }>>([]);
+  const [history, setHistory] = useState<ConversationEntry[]>([]);
+
+  // Both LLMs required for conversational analytics
+  const chatEnabled = webllmReady && backendLLMAvailable;
+
+  // Compute chat status message
+  const chatStatusMessage = !webllmReady && !backendLLMAvailable
+    ? "WebLLM loading... Backend LLM unavailable -- start Ollama"
+    : !webllmReady
+      ? "Waiting for WebLLM to load..."
+      : !backendLLMAvailable
+        ? "Backend LLM unavailable -- start Ollama"
+        : "";
 
   // Fetch model detail when selection changes
   useEffect(() => {
@@ -75,11 +99,13 @@ export default function CustomDataDashboard({
     setModelLoading(true);
     setModelDetail(null);
     setPopMetrics([]);
+    setKpiInsights("");
 
     const client = createPlatformAPIClient();
     client.getModelDetail(tenantSlug, selectedModelName).then(detail => {
       if (!cancelled) {
         setModelDetail(detail);
+        setModelDetails(prev => new Map(prev).set(selectedModelName, detail));
         setModelLoading(false);
       }
     }).catch(err => {
@@ -97,6 +123,19 @@ export default function CustomDataDashboard({
     return () => { cancelled = true; };
   }, [selectedModelName, tenantSlug]);
 
+  // Prefetch all model details for context enrichment
+  useEffect(() => {
+    if (!tenantSlug || models.length === 0) return;
+    const client = createPlatformAPIClient();
+    for (const model of models) {
+      if (!modelDetails.has(model.name)) {
+        client.getModelDetail(tenantSlug, model.name).then(detail => {
+          setModelDetails(prev => new Map(prev).set(model.name, detail));
+        }).catch(() => { /* non-critical */ });
+      }
+    }
+  }, [tenantSlug, models]);
+
   // Fetch PoP KPI metrics when model detail loads
   useEffect(() => {
     if (!modelDetail || !tenantSlug) return;
@@ -107,6 +146,16 @@ export default function CustomDataDashboard({
       if (!cancelled) {
         setPopMetrics(metrics);
         setPopLoading(false);
+
+        // Generate proactive KPI insights via WebLLM (non-blocking)
+        if (webllmReady && webllmEngine && metrics.length > 0) {
+          const handler = webllmEngine as {
+            analyzeKPICards: (metrics: PoPMetric[], modelName: string) => Promise<string>;
+          };
+          handler.analyzeKPICards(metrics, selectedModelName).then(result => {
+            if (!cancelled) setKpiInsights(result);
+          }).catch(() => { /* non-critical */ });
+        }
       }
     }).catch(() => {
       if (!cancelled) setPopLoading(false);
@@ -115,74 +164,102 @@ export default function CustomDataDashboard({
     return () => { cancelled = true; };
   }, [modelDetail, tenantSlug]);
 
-  // Three-pass query handler
+  // Re-analyze KPI cards when WebLLM becomes available after PoP loaded
+  useEffect(() => {
+    if (!webllmReady || !webllmEngine || popMetrics.length === 0 || kpiInsights) return;
+    const handler = webllmEngine as {
+      analyzeKPICards: (metrics: PoPMetric[], modelName: string) => Promise<string>;
+    };
+    handler.analyzeKPICards(popMetrics, selectedModelName).then(result => {
+      setKpiInsights(result);
+    }).catch(() => { /* non-critical */ });
+  }, [webllmReady, popMetrics]);
+
+  // New query handler: WebLLM context enricher -> Backend /ask -> WebLLM insights
   const handleQuerySubmit = async () => {
-    if (!prompt.trim() || !webllmEngine || !modelDetail) return;
+    if (!prompt.trim() || !modelDetail) return;
+
+    // Guard: both LLMs must be available
+    if (!chatEnabled) {
+      setLastError(chatStatusMessage);
+      return;
+    }
+
     setIsProcessing(true);
     setLastError(null);
     setChartConfig(null);
-    setKpiResult(null);
+    setEchartsSpec(null);
+    setBackendAnswer("");
     setInsights("");
-    setGeneratedRequest("");
+    setLastProvider("");
 
-    const userEntry = { role: "user" as const, prompt: prompt.trim() };
+    const userEntry: ConversationEntry = { role: "user", prompt: prompt.trim() };
 
     try {
-      // Pass 1: Local WebLLM generates semantic request JSON
-      setLoadingStatus("Translating to semantic query...");
       const handler = webllmEngine as {
-        generateSemanticRequest: (prompt: string, model: string, context?: PinnedItem[]) => Promise<Record<string, unknown>>;
-        generateInsights: (prompt: string, data: Record<string, unknown>[]) => Promise<string>;
+        generateSemanticContext: (
+          prompt: string,
+          allModels: ModelSummary[],
+          modelDetails: Map<string, ModelDetail>,
+          contextQueries?: PinnedItem[],
+        ) => Promise<string>;
+        generateInsights: (
+          prompt: string,
+          data: Record<string, unknown>[],
+        ) => Promise<string>;
       };
 
-      const semanticRequest = await handler.generateSemanticRequest(prompt, selectedModelName, pinnedItems);
-      const requestStr = JSON.stringify(semanticRequest, null, 2);
-      setGeneratedRequest(requestStr);
+      // Pass 1: WebLLM generates semantic context (model/field hints)
+      setLoadingStatus("Analyzing question...");
+      const semanticContext = await handler.generateSemanticContext(
+        prompt,
+        models,
+        modelDetails,
+        pinnedItems,
+      );
 
-      // Pass 2: Send to Backend BSL Agent
-      setLoadingStatus("Querying data warehouse via BSL...");
+      // Pass 2: Backend /ask with question + semantic context
+      setLoadingStatus("Querying data warehouse...");
       const client = createPlatformAPIClient();
-      // deno-lint-ignore no-explicit-any
-      const result = await client.executeQuery(tenantSlug, semanticRequest as any);
+      const askResponse: AskResponse = await client.askQuestion(tenantSlug, {
+        question: prompt,
+        semantic_context: semanticContext,
+      });
 
-      const rows = result.data;
+      setBackendAnswer(askResponse.answer);
+      setLastProvider(askResponse.provider);
+
+      const records = askResponse.records || [];
       let resultChart: ChartConfig | null = null;
-      let resultKpi: { value: number; title: string } | null = null;
 
-      const isKPI = rows.length === 1 && Object.keys(rows[0]).length === 1;
-      if (isKPI) {
-        const key = Object.keys(rows[0])[0];
-        resultKpi = {
-          value: Number(rows[0][key]),
-          title: key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
-        };
-        setKpiResult(resultKpi);
-      } else if (rows.length > 0) {
-        // deno-lint-ignore no-explicit-any
-        const title = (semanticRequest as any).measures?.[0]
-          // deno-lint-ignore no-explicit-any
-          ? `${(semanticRequest as any).measures[0]} Analysis`
-          : "Query Result";
-        resultChart = generateDashboardChartConfig(
-          {
-            // deno-lint-ignore no-explicit-any
-            dimensions: (semanticRequest as any).dimensions || [],
-            // deno-lint-ignore no-explicit-any
-            measures: (semanticRequest as any).measures || [],
-            chartType: "bar",
-            title,
-          },
-          rows,
-        );
-        if (resultChart) setChartConfig(resultChart);
+      // Use ECharts spec from BSL if available
+      if (askResponse.chart_spec) {
+        setEchartsSpec(askResponse.chart_spec);
+      } else if (records.length > 0 && records.length > 1) {
+        // Generate chart from records
+        const columns = Object.keys(records[0]);
+        const dims = columns.filter(c => typeof records[0][c] === "string");
+        const measures = columns.filter(c => typeof records[0][c] === "number");
+        if (dims.length > 0 && measures.length > 0) {
+          resultChart = generateDashboardChartConfig(
+            {
+              dimensions: dims.slice(0, 2),
+              measures: measures.slice(0, 3),
+              chartType: "bar",
+              title: `${measures[0]} Analysis`,
+            },
+            records,
+          );
+          if (resultChart) setChartConfig(resultChart);
+        }
       }
 
-      // Pass 3: Local WebLLM generates insights from results
+      // Pass 3: WebLLM generates rich insights connecting results to KPI context
       let generatedInsights = "";
-      if (rows.length > 0) {
+      if (records.length > 0) {
         setLoadingStatus("Generating insights...");
         try {
-          generatedInsights = await handler.generateInsights(prompt, rows);
+          generatedInsights = await handler.generateInsights(prompt, records);
           setInsights(generatedInsights);
         } catch (e) {
           console.warn("Insight generation failed:", e);
@@ -191,10 +268,13 @@ export default function CustomDataDashboard({
 
       setHistory(prev => [...prev, userEntry, {
         role: "assistant",
+        answer: askResponse.answer,
+        records,
         chart: resultChart,
-        kpi: resultKpi,
+        chartSpec: askResponse.chart_spec,
         insights: generatedInsights,
-        request: requestStr,
+        modelUsed: askResponse.model_used,
+        provider: askResponse.provider,
       }]);
 
     } catch (error: unknown) {
@@ -215,8 +295,8 @@ export default function CustomDataDashboard({
       id: Math.random().toString(36).substr(2, 9),
       tableName: selectedModelName,
       config: chartConfig,
-      explanation: insights || "Pinned analysis",
-      sql: generatedRequest,
+      explanation: insights || backendAnswer || "Pinned analysis",
+      sql: "",
       prompt: history.filter(h => h.role === "user").pop()?.prompt || "",
       timestamp: Date.now(),
     };
@@ -227,12 +307,14 @@ export default function CustomDataDashboard({
   const handleModelSwitch = (modelName: string) => {
     setSelectedModelName(modelName);
     setChartConfig(null);
-    setKpiResult(null);
+    setEchartsSpec(null);
+    setBackendAnswer("");
     setInsights("");
-    setGeneratedRequest("");
+    setKpiInsights("");
     setLastError(null);
     setHistory([]);
     setPrompt("");
+    setLastProvider("");
   };
 
   return (
@@ -262,6 +344,16 @@ export default function CustomDataDashboard({
           </div>
 
           <div class="flex items-center gap-4">
+            {/* LLM Status Indicators */}
+            <div class="flex items-center gap-2">
+              <span class={`w-2 h-2 rounded-full ${webllmReady ? "bg-green-400" : "bg-yellow-400 animate-pulse"}`} />
+              <span class="text-[9px] text-gata-cream/30 font-bold uppercase tracking-widest">WebLLM</span>
+              <span class={`w-2 h-2 rounded-full ml-2 ${backendLLMAvailable ? "bg-green-400" : "bg-red-400"}`} />
+              <span class="text-[9px] text-gata-cream/30 font-bold uppercase tracking-widest">
+                {backendLLMProvider || "Backend"}
+              </span>
+            </div>
+
             <select
               value={selectedModelName}
               onChange={(e) => handleModelSwitch((e.target as HTMLSelectElement).value)}
@@ -304,6 +396,14 @@ export default function CustomDataDashboard({
           </div>
         )}
 
+        {/* KPI Insights (from WebLLM) */}
+        {kpiInsights && (
+          <div class="bg-gata-green/5 border border-gata-green/15 rounded-xl p-5">
+            <h4 class="text-[10px] font-black text-gata-green uppercase tracking-widest mb-2">KPI Insights</h4>
+            <p class="text-sm text-gata-cream/80 leading-relaxed whitespace-pre-wrap">{kpiInsights}</p>
+          </div>
+        )}
+
         <div class="flex flex-col lg:flex-row gap-6">
           {/* Left Panel: Semantic Context */}
           <div class="lg:w-80 flex-shrink-0 space-y-4">
@@ -329,54 +429,53 @@ export default function CustomDataDashboard({
                 </div>
               ) : (
                 <div class="p-6 flex flex-col flex-1">
-                  {/* Chart Result */}
-                  {chartConfig && (
+                  {/* Backend Answer */}
+                  {backendAnswer && (
+                    <div class="bg-gata-dark/60 border border-gata-green/10 rounded-xl p-5 mb-6">
+                      <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-[10px] font-black text-gata-green uppercase tracking-widest">Backend Analysis</h4>
+                        {lastProvider && (
+                          <span class="text-[9px] text-gata-cream/20 font-mono">{lastProvider}</span>
+                        )}
+                      </div>
+                      <p class="text-sm text-gata-cream/80 leading-relaxed whitespace-pre-wrap">{backendAnswer}</p>
+                    </div>
+                  )}
+
+                  {/* Chart Result (from BSL ECharts or generated) */}
+                  {(chartConfig || echartsSpec) && (
                     <div class="mb-6">
                       <div class="flex justify-between items-center mb-4">
                         <h4 class="text-[10px] font-black text-gata-green uppercase tracking-widest">Visualization</h4>
-                        <button
-                          type="button"
-                          onClick={handlePin}
-                          class="px-4 py-2 bg-gata-green text-gata-dark font-black rounded-lg text-[10px] uppercase tracking-widest hover:bg-gata-hover transition-all"
-                        >
-                          Pin
-                        </button>
+                        {chartConfig && (
+                          <button
+                            type="button"
+                            onClick={handlePin}
+                            class="px-4 py-2 bg-gata-green text-gata-dark font-black rounded-lg text-[10px] uppercase tracking-widest hover:bg-gata-hover transition-all"
+                          >
+                            Pin
+                          </button>
+                        )}
                       </div>
                       <div class="bg-gata-darker/60 rounded-xl p-4 border border-gata-green/5">
-                        <FreshChartsWrapper config={chartConfig} height={320} />
+                        {chartConfig
+                          ? <FreshChartsWrapper config={chartConfig} height={320} />
+                          : echartsSpec && (
+                            <div class="text-gata-cream/50 text-xs font-mono p-4 bg-gata-dark/40 rounded-lg overflow-auto max-h-80">
+                              <pre>{JSON.stringify(echartsSpec, null, 2)}</pre>
+                            </div>
+                          )
+                        }
                       </div>
                     </div>
                   )}
 
-                  {/* KPI Result */}
-                  {kpiResult && (
-                    <div class="mb-6">
-                      <h4 class="text-[10px] font-black text-gata-green uppercase tracking-widest mb-3">Result</h4>
-                      <div class="bg-gata-dark/60 rounded-xl border border-gata-green/10 p-6 max-w-sm">
-                        <p class="text-xs text-gata-cream/50 font-bold uppercase tracking-widest mb-1">{kpiResult.title}</p>
-                        <p class="text-3xl font-black text-gata-cream">{formatCompact(kpiResult.value)}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* AI Insights */}
+                  {/* AI Insights (from WebLLM post-analysis) */}
                   {insights && (
                     <div class="bg-gata-green/5 border border-gata-green/15 rounded-xl p-5 mb-6">
-                      <h4 class="text-[10px] font-black text-gata-green uppercase tracking-widest mb-2">AI Insights</h4>
+                      <h4 class="text-[10px] font-black text-gata-green uppercase tracking-widest mb-2">Enriched Insights</h4>
                       <p class="text-sm text-gata-cream/80 leading-relaxed whitespace-pre-wrap">{insights}</p>
                     </div>
-                  )}
-
-                  {/* Generated Request (collapsible) */}
-                  {generatedRequest && (
-                    <details class="mb-6">
-                      <summary class="text-[10px] font-black text-gata-cream/30 uppercase tracking-widest cursor-pointer hover:text-gata-cream/50 transition-colors">
-                        Semantic Request JSON
-                      </summary>
-                      <pre class="mt-2 bg-gata-dark/60 border border-gata-green/10 rounded-lg p-4 text-xs text-gata-cream/50 font-mono overflow-x-auto max-h-48">
-                        {generatedRequest}
-                      </pre>
-                    </details>
                   )}
 
                   {/* Error Display */}
@@ -387,11 +486,13 @@ export default function CustomDataDashboard({
                   )}
 
                   {/* Empty State */}
-                  {!chartConfig && !kpiResult && !insights && !lastError && !isProcessing && (
+                  {!chartConfig && !echartsSpec && !backendAnswer && !insights && !lastError && !isProcessing && (
                     <div class="flex flex-col items-center justify-center flex-1 py-16 text-center">
                       <div class="text-5xl opacity-5 mb-6 font-black text-gata-cream">?</div>
                       <p class="text-gata-cream/30 text-sm font-medium max-w-md">
-                        Ask a question about your data below. The AI will translate your question into a structured query, execute it against your warehouse, and visualize the results.
+                        {chatEnabled
+                          ? "Ask a question about your data below. The AI will analyze your question, query the warehouse, and visualize the results."
+                          : chatStatusMessage || "Waiting for AI services to become available..."}
                       </p>
                     </div>
                   )}
@@ -401,33 +502,43 @@ export default function CustomDataDashboard({
 
             {/* Chat Input */}
             <div class="flex gap-3">
-              <input
-                type="text"
-                value={prompt}
-                onInput={(e) => setPrompt((e.target as HTMLInputElement).value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleQuerySubmit();
-                  }
-                }}
-                placeholder={modelDetail
-                  ? `e.g., Show me ${modelDetail.measures[0]?.name || "total revenue"} by ${modelDetail.dimensions.find(d => d.type === "string")?.name || "source"} over the last 30 days...`
-                  : "Loading model definitions..."}
-                class="flex-1 bg-gata-dark border-2 border-gata-green/15 rounded-xl px-6 py-4 text-gata-cream font-medium focus:border-gata-green outline-none transition-all placeholder:text-gata-cream/15"
-                disabled={isProcessing || !modelDetail}
-              />
+              <div class="flex-1 relative">
+                <input
+                  type="text"
+                  value={prompt}
+                  onInput={(e) => setPrompt((e.target as HTMLInputElement).value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleQuerySubmit();
+                    }
+                  }}
+                  placeholder={!modelDetail
+                    ? "Loading model definitions..."
+                    : !chatEnabled
+                      ? chatStatusMessage
+                      : `e.g., Show me ${modelDetail.measures[0]?.name || "total revenue"} by ${modelDetail.dimensions.find(d => d.type === "string")?.name || "source"} over the last 30 days...`}
+                  class="w-full bg-gata-dark border-2 border-gata-green/15 rounded-xl px-6 py-4 text-gata-cream font-medium focus:border-gata-green outline-none transition-all placeholder:text-gata-cream/15"
+                  disabled={isProcessing || !modelDetail || !chatEnabled}
+                />
+                {/* Status bar under input when LLMs not ready */}
+                {!chatEnabled && modelDetail && (
+                  <p class="absolute -bottom-5 left-2 text-[9px] text-yellow-400/70 font-bold uppercase tracking-widest">
+                    {chatStatusMessage}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={handleQuerySubmit}
-                disabled={isProcessing || !prompt.trim() || !modelDetail}
+                disabled={isProcessing || !prompt.trim() || !modelDetail || !chatEnabled}
                 class={`px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                  !isProcessing && prompt.trim() && modelDetail
+                  !isProcessing && prompt.trim() && modelDetail && chatEnabled
                     ? "bg-gata-green text-gata-dark hover:bg-gata-hover shadow-lg"
                     : "bg-gata-dark/40 text-gata-cream/20 cursor-not-allowed border border-gata-green/10"
                 }`}
               >
-                {isProcessing ? "Analyzing..." : "Analyze"}
+                {isProcessing ? "Analyzing..." : !chatEnabled ? "Unavailable" : "Analyze"}
               </button>
             </div>
 

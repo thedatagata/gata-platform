@@ -90,7 +90,14 @@ class QueryBuilder:
         where_clauses = [f"{prefix}tenant_slug = ?"]
         params.append(tenant_slug)
 
+        # Validate filter fields against known dimensions + measures
+        all_fields = valid_dims | valid_measures
         for f in request.filters:
+            if f.field not in all_fields and f.field != "tenant_slug":
+                raise ValueError(
+                    f"Unknown filter field '{f.field}' for model '{request.model}'. "
+                    f"Valid fields: {', '.join(sorted(all_fields))}"
+                )
             col_ref = f"{prefix}{f.field}"
             if f.op in ("IS NULL", "IS NOT NULL"):
                 where_clauses.append(f"{col_ref} {f.op}")
@@ -117,7 +124,13 @@ class QueryBuilder:
         # --- ORDER BY ---
         if request.order_by:
             order_parts = []
+            all_selectable = all_fields | valid_calc
             for ob in request.order_by:
+                if ob.field not in all_selectable:
+                    raise ValueError(
+                        f"Unknown order_by field '{ob.field}' for model '{request.model}'. "
+                        f"Valid fields: {', '.join(sorted(all_selectable))}"
+                    )
                 order_parts.append(f"{ob.field} {ob.dir.upper()}")
             sql_parts.append(f"ORDER BY {', '.join(order_parts)}")
 

@@ -1,6 +1,5 @@
 // islands/onboarding/DashboardRouter.tsx
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
-import SmartDashLoadingPage from "../dashboard/smarter_dashboard/SmartDashLoadingPage.tsx";
 import CustomDataDashboard from "../dashboard/smarter_dashboard/CustomDataDashboard.tsx";
 import { createPlatformAPIClient, type ModelSummary, type ReadinessStatus } from "../../utils/api/platform-api-client.ts";
 import PipelineHealthDashboard from "../dashboard/observability/PipelineHealthDashboard.tsx";
@@ -11,9 +10,17 @@ interface DashboardRouterProps {
 }
 
 export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
+  // WebLLM state — loads in background, dashboard is usable without it
   // deno-lint-ignore no-explicit-any
   const [webllmEngine, setWebllmEngine] = useState<any>(null);
   const [webllmReady, setWebllmReady] = useState(false);
+  const [webllmLoading, setWebllmLoading] = useState(false);
+  const [webllmProgress, setWebllmProgress] = useState(0);
+  const [webllmStatus, setWebllmStatus] = useState("");
+
+  // Backend LLM state
+  const [backendLLMAvailable, setBackendLLMAvailable] = useState(false);
+  const [backendLLMProvider, setBackendLLMProvider] = useState("");
 
   // Models
   const [availableModels, setAvailableModels] = useState<ModelSummary[]>([]);
@@ -24,11 +31,6 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
   // Provisioning state (pipeline still building)
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisioningStatus, setProvisioningStatus] = useState<ReadinessStatus | null>(null);
-
-  const handleWebllmReady = (engine: unknown) => {
-    setWebllmEngine(engine);
-    setWebllmReady(true);
-  };
 
   // Provisioning readiness polling
   const pollRef = useRef<number | null>(null);
@@ -90,6 +92,52 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
       }
     });
   }, [tenantSlug, availableModels.length, modelsLoading, modelsError, isProvisioning]);
+
+  // Check backend LLM health on mount and periodically
+  useEffect(() => {
+    if (!tenantSlug) return;
+
+    const client = createPlatformAPIClient();
+    const checkLLM = async () => {
+      const status = await client.checkBackendLLM();
+      setBackendLLMAvailable(status.available);
+      setBackendLLMProvider(status.provider);
+    };
+
+    checkLLM();
+    // Re-check every 30s in case Ollama starts/stops
+    const interval = setInterval(checkLLM, 30_000);
+    return () => clearInterval(interval);
+  }, [tenantSlug]);
+
+  // Initialize WebLLM in background once models are loaded
+  useEffect(() => {
+    if (webllmReady || webllmLoading || availableModels.length === 0) return;
+
+    setWebllmLoading(true);
+    setWebllmStatus("Loading AI model...");
+
+    (async () => {
+      try {
+        const { WebLLMSemanticHandler } = await import(
+          "../dashboard/smarter_dashboard/../../../utils/smarter/autovisualization_dashboard/webllm-handler.ts"
+        );
+        const llmHandler = new WebLLMSemanticHandler({}, "3b");
+        await llmHandler.initialize((p: { progress: number; text: string }) => {
+          setWebllmProgress(p.progress || 0);
+          setWebllmStatus(p.text || "Loading AI model...");
+        });
+        setWebllmEngine(llmHandler);
+        setWebllmReady(true);
+        setWebllmStatus("Ready");
+      } catch (err) {
+        console.error("WebLLM init failed:", err);
+        setWebllmStatus(`Error: ${(err as Error).message}`);
+      } finally {
+        setWebllmLoading(false);
+      }
+    })();
+  }, [availableModels.length, webllmReady, webllmLoading]);
 
   // No tenant configured
   if (!tenantSlug) {
@@ -225,22 +273,39 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
     );
   }
 
-  // Initialize WebLLM (models loaded, WebLLM not ready)
-  if (!webllmReady) {
-    return (
-      <SmartDashLoadingPage
-        onComplete={handleWebllmReady}
-      />
-    );
-  }
-
-  // Dashboard workspace (models loaded + WebLLM ready)
+  // Dashboard workspace — shown immediately once models load.
+  // WebLLM loads in background; chat is disabled until both LLMs are ready.
   return (
-    <CustomDataDashboard
-      webllmEngine={webllmEngine}
-      tenantSlug={tenantSlug}
-      models={availableModels}
-      onShowObservability={() => setShowObservability(true)}
-    />
+    <div class="relative">
+      {/* WebLLM loading indicator (floating, non-blocking) */}
+      {webllmLoading && (
+        <div class="fixed bottom-4 right-4 z-50 bg-gata-dark/90 backdrop-blur-sm border border-gata-green/20 rounded-xl px-4 py-3 shadow-xl max-w-xs">
+          <div class="flex items-center gap-3">
+            <div class="w-5 h-5 border-2 border-gata-green/30 border-t-gata-green rounded-full animate-spin flex-shrink-0" />
+            <div class="min-w-0">
+              <p class="text-[10px] font-black text-gata-green uppercase tracking-widest">Loading WebLLM</p>
+              <p class="text-[9px] text-gata-cream/40 truncate">{webllmStatus}</p>
+            </div>
+            <span class="text-[10px] text-gata-cream/30 font-bold flex-shrink-0">{Math.round(webllmProgress * 100)}%</span>
+          </div>
+          <div class="mt-2 w-full bg-gata-dark/60 rounded-full h-1 overflow-hidden">
+            <div
+              class="h-1 bg-gata-green rounded-full transition-all duration-500"
+              style={{ width: `${webllmProgress * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <CustomDataDashboard
+        webllmEngine={webllmEngine}
+        webllmReady={webllmReady}
+        backendLLMAvailable={backendLLMAvailable}
+        backendLLMProvider={backendLLMProvider}
+        tenantSlug={tenantSlug}
+        models={availableModels}
+        onShowObservability={() => setShowObservability(true)}
+      />
+    </div>
   );
 }

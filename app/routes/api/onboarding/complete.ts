@@ -70,7 +70,7 @@ export const handler: Handlers = {
       const scriptPath = resolve(Deno.cwd(), "../scripts/onboard_tenant.py");
 
       const command = new Deno.Command("uv", {
-        args: ["run", "python", scriptPath, tenant_slug, "--target", "dev", "--days", "30"],
+        args: ["run", "python", scriptPath, tenant_slug, "--target", "dev", "--days", "180"],
         stdout: "inherit",
         stderr: "inherit",
       });

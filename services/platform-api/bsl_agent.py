@@ -147,8 +147,17 @@ class GATABSLTools(BSLTools):
 # Agent loop
 # ───────────────────────────────────────────────────────────
 
-def _build_system_prompt(tenant_slug: str, models: dict[str, SemanticModel]) -> str:
-    """Build a system prompt with tenant context and model catalog."""
+def _build_system_prompt(
+    tenant_slug: str,
+    models: dict[str, SemanticModel],
+    semantic_context: str = "",
+) -> str:
+    """Build a system prompt with tenant context and model catalog.
+
+    If *semantic_context* is provided (from the frontend WebLLM enricher),
+    it is injected as a hint section so the backend LLM can make better
+    model/field choices without full exploration.
+    """
     model_descriptions = []
     for name, model in models.items():
         dims = list(model.get_dimensions().keys())
@@ -162,12 +171,23 @@ def _build_system_prompt(tenant_slug: str, models: dict[str, SemanticModel]) -> 
 
     models_text = "\n".join(model_descriptions)
 
+    context_section = ""
+    if semantic_context:
+        context_section = f"""
+
+### Frontend Context Hints
+The user's browser-side AI has analyzed the question and suggests the following
+context. Use this as a starting hint but verify field names via get_model:
+
+{semantic_context}
+"""
+
     return f"""You are a data analyst assistant for tenant '{tenant_slug}'.
 You have access to semantic models that let you query analytics data.
 
 Available models:
 {models_text}
-
+{context_section}
 To answer questions:
 1. Call list_models to see what's available
 2. Call get_model(model_name) to see dimensions and measures
@@ -216,6 +236,7 @@ def _run_agent_loop(
     bsl_tools: GATABSLTools,
     llm: Any,
     tenant_slug: str,
+    semantic_context: str = "",
 ) -> AgentResponse:
     """Run the LLM agent loop with BSLTools.
 
@@ -226,7 +247,7 @@ def _run_agent_loop(
     start = time.time()
     response = AgentResponse(provider="llm")
 
-    system_prompt = _build_system_prompt(tenant_slug, bsl_tools.models)
+    system_prompt = _build_system_prompt(tenant_slug, bsl_tools.models, semantic_context)
     lc_tools = bsl_tools.get_callable_tools()
     llm_with_tools = llm.bind_tools(lc_tools)
 
@@ -358,7 +379,7 @@ def _fallback_keyword_search(
 # Public API — main entry point
 # ───────────────────────────────────────────────────────────
 
-def ask(question: str, tenant_slug: str) -> AgentResponse:
+def ask(question: str, tenant_slug: str, semantic_context: str = "") -> AgentResponse:
     """Ask a natural language analytics question against a tenant's semantic models.
 
     Routes through:
@@ -395,7 +416,7 @@ def ask(question: str, tenant_slug: str) -> AgentResponse:
     provider = get_llm_provider()
     if provider.is_available and provider.llm and LANGCHAIN_AVAILABLE:
         try:
-            response = _run_agent_loop(question, bsl_tools, provider.llm, tenant_slug)
+            response = _run_agent_loop(question, bsl_tools, provider.llm, tenant_slug, semantic_context)
             response.provider = provider.provider_name
             return response
         except Exception as e:
