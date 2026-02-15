@@ -489,7 +489,7 @@ def _build_column_metadata(
                 col.get("is_time_dimension")
                 and col.get("bsl_type") == "timestamp_epoch"
             ):
-                date_name = col_name.replace("_ts", "_date").replace("_timestamp", "_date")
+                date_name = col_name.replace("_timestamp", "_date").replace("_ts", "_date")
                 if date_name == col_name:
                     date_name = col_name + "_date"
                 columns[date_name] = {
@@ -696,7 +696,9 @@ def _generate_bsl_config(
                     "expr": _ibis_agg_expr(col_name, agg),
                     "description": desc,
                 }
-                continue
+                # Don't skip if also in dim_overrides (dual-use columns)
+                if col_name not in dim_overrides:
+                    continue
 
             if col_name in dim_overrides:
                 override = dim_overrides[col_name]
@@ -716,18 +718,6 @@ def _generate_bsl_config(
                         "expr": f"_.{col_name}",
                         "is_time_dimension": True,
                     }
-                    # Add derived _date dimension for epoch timestamps so the
-                    # LLM can group by DATE instead of raw microsecond values.
-                    # The actual column is added to the Ibis table via mutate()
-                    # in step 8 — here we just register it as a dimension.
-                    if _is_epoch_timestamp(col_name, data_type):
-                        date_name = col_name.replace("_ts", "_date").replace("_timestamp", "_date")
-                        if date_name == col_name:
-                            date_name = col_name + "_date"
-                        model_config["dimensions"][date_name] = {
-                            "expr": f"_.{date_name}",
-                            "is_time_dimension": True,
-                        }
                 else:
                     # Plain string format — no metadata needed
                     model_config["dimensions"][col_name] = f"_.{col_name}"
@@ -735,6 +725,25 @@ def _generate_bsl_config(
                 agg = _infer_aggregation(col_name, data_type)
                 # Plain string format
                 model_config["measures"][col_name] = _ibis_agg_expr(col_name, agg)
+
+        # --- Post-processing: derived _date dimensions for epoch timestamps ---
+        # Runs AFTER the column loop so it works regardless of whether a column
+        # went through YAML overrides or auto-classification. Adds a DATE-typed
+        # dimension from BIGINT epoch columns so the LLM can group by date
+        # instead of raw microsecond values. The actual Ibis column is added
+        # via mutate() in step 8.
+        for col in columns:
+            cn = col["column_name"]
+            dt = col["data_type"]
+            if _is_epoch_timestamp(cn, dt):
+                date_name = cn.replace("_timestamp", "_date").replace("_ts", "_date")
+                if date_name == cn:
+                    date_name = cn + "_date"
+                if date_name not in model_config["dimensions"]:
+                    model_config["dimensions"][date_name] = {
+                        "expr": f"_.{date_name}",
+                        "is_time_dimension": True,
+                    }
 
         # Auto-add count measures for key ID dimensions on fact tables.
         # e.g. session_id → total_sessions, order_id → total_orders
@@ -915,7 +924,7 @@ def create_tenant_semantic_models(
             for col in entry["columns"]:
                 if _is_epoch_timestamp(col["column_name"], col["data_type"]):
                     col_name = col["column_name"]
-                    date_name = col_name.replace("_ts", "_date").replace("_timestamp", "_date")
+                    date_name = col_name.replace("_timestamp", "_date").replace("_ts", "_date")
                     if date_name == col_name:
                         date_name = col_name + "_date"
                     if date_name not in tbl.columns:

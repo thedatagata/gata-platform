@@ -212,7 +212,7 @@ def _build_system_prompt(
             # Strip model prefix: "sessions.session_start_ts" → "session_start_ts"
             short = d.split(".")[-1] if "." in d else d
             if short.endswith("_ts") or short.endswith("_timestamp"):
-                date_name = short.replace("_ts", "_date").replace("_timestamp", "_date")
+                date_name = short.replace("_timestamp", "_date").replace("_ts", "_date")
                 if date_name not in [x.split(".")[-1] for x in dims]:
                     extra_date_dims.append(f"{name}.{date_name}")
         all_dims = dims + extra_date_dims
