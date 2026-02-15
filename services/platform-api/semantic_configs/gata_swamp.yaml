@@ -130,11 +130,34 @@ models:
   - name: session_id
     type: string
     agg: count_distinct
+  - name: funnel_max_step
+    type: number
+    agg: max
+  - name: funnel_step_1_session_start
+    type: number
+    agg: sum
+  - name: funnel_step_2_view_item
+    type: number
+    agg: sum
+  - name: funnel_step_3_add_to_cart
+    type: number
+    agg: sum
+  - name: funnel_step_4_begin_checkout
+    type: number
+    agg: sum
+  - name: funnel_step_5_add_payment_info
+    type: number
+    agg: sum
+  - name: funnel_step_6_purchase
+    type: number
+    agg: sum
+  - name: funnel_conversion_count
+    type: number
+    agg: sum
   calculated_measures:
   - name: conversion_rate
     label: Session Conversion Rate
-    sql: CASE WHEN COUNT(DISTINCT session_id) > 0 THEN SUM(CASE WHEN is_conversion_session
-      THEN 1 ELSE 0 END) * 1.0 / COUNT(DISTINCT session_id) ELSE 0 END
+    sql: "CASE WHEN COUNT(DISTINCT session_id) > 0 THEN SUM(CASE WHEN funnel_step_6_purchase > 0 THEN 1 ELSE 0 END) * 1.0 / COUNT(DISTINCT session_id) ELSE 0 END"
     format: percent
   joins:
   - to: dim_gata_swamp__users

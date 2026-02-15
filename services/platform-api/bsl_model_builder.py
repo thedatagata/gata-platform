@@ -192,7 +192,7 @@ CALC_MEASURE_PATTERNS = {
     "cpc": "ibis.ifelse(_.clicks.sum() > 0, _.spend.sum() / _.clicks.sum(), 0)",
     "cpm": "ibis.ifelse(_.impressions.sum() > 0, _.spend.sum() * 1000.0 / _.impressions.sum(), 0)",
     "aov": "ibis.ifelse(_.order_id.nunique() > 0, _.total_price.sum() / _.order_id.nunique(), 0)",
-    "conversion_rate": "ibis.ifelse(_.session_id.nunique() > 0, _.is_conversion_session.cast('int64').sum().cast('float64') / _.session_id.nunique(), 0)",
+    "conversion_rate": "ibis.ifelse(_.session_id.nunique() > 0, (_.funnel_step_6_purchase > 0).cast('int64').sum().cast('float64') / _.session_id.nunique(), 0)",
 }
 
 
@@ -247,9 +247,9 @@ CALC_MEASURE_REQUIREMENTS = {
         "format": "currency",
     },
     "conversion_rate": {
-        "requires": {"is_conversion_session", "session_id"},
+        "requires": {"funnel_step_6_purchase", "session_id"},
         "label": "Conversion Rate",
-        "sql": "CASE WHEN COUNT(DISTINCT session_id) > 0 THEN SUM(CASE WHEN is_conversion_session THEN 1 ELSE 0 END) * 1.0 / COUNT(DISTINCT session_id) ELSE 0 END",
+        "sql": "CASE WHEN COUNT(DISTINCT session_id) > 0 THEN SUM(CASE WHEN funnel_step_6_purchase > 0 THEN 1 ELSE 0 END) * 1.0 / COUNT(DISTINCT session_id) ELSE 0 END",
         "format": "percent",
     },
 }
