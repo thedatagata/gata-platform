@@ -16,8 +16,10 @@ which reads the dbt catalog.
 """
 
 import json
+import re
 import time
 import logging
+import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Any
 
@@ -85,6 +87,32 @@ class GATABSLTools(BSLTools):
         self._error_callback = None
         self.models = models
 
+    @staticmethod
+    def _sanitize_query(query: str) -> str:
+        """Fix common LLM query syntax mistakes before evaluation.
+
+        - Strips keyword argument syntax in aggregate: aggregate(x='y') → aggregate('y')
+        - Strips aggregate wrappers: aggregate('sum(spend)') → aggregate('spend')
+        """
+        # Fix kwarg syntax: aggregate(total_sessions='total_sessions') → aggregate('total_sessions')
+        def _fix_kwargs(match: re.Match) -> str:
+            args_str = match.group(1)
+            # Extract values from key='value' patterns
+            cleaned = re.sub(r"\w+\s*=\s*(['\"])", r"\1", args_str)
+            return f".aggregate({cleaned})"
+
+        query = re.sub(r"\.aggregate\(([^)]+)\)", _fix_kwargs, query)
+
+        # Strip agg wrappers: 'sum(spend)' → 'spend', 'count_distinct(session_id)' → 'session_id'
+        query = re.sub(
+            r"['\"](?:sum|avg|count|min|max|count_distinct)\((\w+)\)['\"]",
+            r"'\1'",
+            query,
+            flags=re.IGNORECASE,
+        )
+
+        return query
+
     def _query_model(
         self,
         query: str,
@@ -102,6 +130,10 @@ class GATABSLTools(BSLTools):
         from returns.result import Failure, Success
         import ibis
         from ibis import _
+
+        # Sanitize common LLM syntax mistakes
+        query = self._sanitize_query(query)
+        logger.debug(f"[BSL Agent] Executing query: {repr(query)}")
 
         try:
             result = safe_eval(query, context={**self.models, "ibis": ibis, "_": _})
@@ -125,19 +157,28 @@ class GATABSLTools(BSLTools):
 
         except Exception as e:
             error_str = str(e)
-            if len(error_str) > 300:
-                error_str = error_str[:300] + "..."
 
-            error_msg = f"Query Error: {error_str}"
-
-            # Try to provide schema hints on attribute errors
+            # Always try to provide available fields — the BSL internal dumps
+            # are huge and useless; the LLM needs to know what DOES work.
             model_name = query.split(".")[0] if "." in query else None
-            if "has no attribute" in error_str and model_name:
+            schema_hint = ""
+            if model_name and model_name in self.models:
                 try:
-                    schema = self._get_model(model_name)
-                    error_msg += f"\n\nAvailable fields for '{model_name}':\n{schema}"
+                    dims = list(self.models[model_name].get_dimensions().keys())
+                    measures = list(self.models[model_name].get_measures().keys())
+                    schema_hint = (
+                        f"\n\nAvailable fields for '{model_name}':\n"
+                        f"  Dimensions: {', '.join(dims)}\n"
+                        f"  Measures: {', '.join(measures)}"
+                    )
                 except Exception:
                     pass
+
+            # Keep error message concise — truncate BSL internal dumps
+            if len(error_str) > 150:
+                error_str = error_str[:150] + "..."
+
+            error_msg = f"Query failed: {error_str}{schema_hint}"
 
             from langchain_core.tools import ToolException
             raise ToolException(error_msg) from e
@@ -162,10 +203,24 @@ def _build_system_prompt(
     for name, model in models.items():
         dims = list(model.get_dimensions().keys())
         measures = list(model.get_measures().keys())
+
+        # Add derived _date dimensions for epoch timestamps.
+        # BSL's get_dimensions() doesn't include them, but the Ibis table
+        # has them via mutate() and queries resolve correctly.
+        extra_date_dims = []
+        for d in dims:
+            # Strip model prefix: "sessions.session_start_ts" → "session_start_ts"
+            short = d.split(".")[-1] if "." in d else d
+            if short.endswith("_ts") or short.endswith("_timestamp"):
+                date_name = short.replace("_ts", "_date").replace("_timestamp", "_date")
+                if date_name not in [x.split(".")[-1] for x in dims]:
+                    extra_date_dims.append(f"{name}.{date_name}")
+        all_dims = dims + extra_date_dims
+
         desc = model.description or name
         model_descriptions.append(
             f"- **{name}**: {desc}\n"
-            f"  Dimensions: {', '.join(dims)}\n"
+            f"  Dimensions: {', '.join(all_dims)}\n"
             f"  Measures: {', '.join(measures)}"
         )
 
@@ -176,30 +231,39 @@ def _build_system_prompt(
         context_section = f"""
 
 ### Frontend Context Hints
-The user's browser-side AI has analyzed the question and suggests the following
-context. Use this as a starting hint but verify field names via get_model:
+The user's browser-side AI has analyzed the question and suggests:
 
 {semantic_context}
 """
 
-    return f"""You are a data analyst assistant for tenant '{tenant_slug}'.
-You have access to semantic models that let you query analytics data.
+    return f"""You are a data analyst for tenant '{tenant_slug}'.
 
-Available models:
+Available models (with EXACT field names you MUST use):
 {models_text}
 {context_section}
-To answer questions:
-1. Call list_models to see what's available
-2. Call get_model(model_name) to see dimensions and measures
-3. Call query_model with an Ibis-style query string like:
-   model_name.group_by("dimension").aggregate("measure1", "measure2")
+## Query syntax (CRITICAL — follow exactly)
 
-Query syntax examples:
-- ad_performance.group_by("source_platform").aggregate("spend", "clicks")
-- orders.group_by("financial_status").aggregate("total_price")
-- sessions.group_by("traffic_source", "traffic_medium").aggregate("session_id", "session_revenue")
+query_model takes a SINGLE string argument called "query". The query string uses
+this Ibis-style chain syntax with POSITIONAL string arguments:
 
-Always call get_model first to see exact field names before querying.
+  model_name.group_by('dim1', 'dim2').aggregate('measure1', 'measure2')
+
+### Rules
+- All dimension and measure names are positional STRING arguments in single quotes
+- NEVER use keyword arguments like aggregate(x='y') — ONLY positional: aggregate('y')
+- NEVER use aggregate wrappers like sum(spend) — just use the measure name: 'spend'
+- Use EXACT field names from the model — do not invent names like 'session_start_date'
+- For date-level time series, use _date dimensions (e.g. 'session_start_date', 'session_end_date')
+  NOT the raw epoch _ts dimensions
+
+### Examples
+- ad_performance.group_by('source_platform').aggregate('spend', 'clicks')
+- sessions.group_by('session_start_date', 'device_category').aggregate('total_sessions')
+- sessions.group_by('session_start_date').aggregate('total_sessions', 'session_revenue')
+- orders.group_by('financial_status').aggregate('total_price')
+- ad_performance.group_by('report_date', 'source_platform').aggregate('spend', 'impressions')
+
+Call get_model(model_name) first to see exact field names.
 """
 
 
@@ -231,6 +295,122 @@ def _extract_query_results(result_str: str, response: AgentResponse, tool_args: 
         logger.debug(f"[BSL Agent] Could not parse query result: {e}")
 
 
+def _try_extract_text_tool_calls(
+    content: str,
+    model_names: list[str],
+) -> list[tuple[str, dict]]:
+    """Extract tool calls from text when the LLM outputs them as prose.
+
+    Smaller Ollama models (qwen2.5-coder:7b etc.) sometimes output tool call
+    descriptions as text instead of using LangChain's structured tool calling.
+    This function recovers those by pattern-matching BSL expressions and
+    JSON-like tool call blocks from the AI's text content.
+
+    Returns a list of (tool_name, tool_args) tuples.
+    """
+    if not content:
+        return []
+
+    calls: list[tuple[str, dict]] = []
+
+    # Strip code fences for uniform parsing
+    stripped = re.sub(r"```(?:json|python)?\s*", "", content)
+    stripped = stripped.replace("```", "")
+
+    # --- Pattern 1: JSON tool call with "query" field ---
+    # Matches: {"name": "query_model", "arguments": {"query": "sessions.group_by(...)..."}}
+    query_match = re.search(
+        r'"name"\s*:\s*"query_model"[\s\S]*?"query"\s*:\s*"((?:[^"\\]|\\.)*)"',
+        stripped,
+    )
+    if query_match:
+        query_expr = query_match.group(1).replace('\\"', '"')
+        calls.append(("query_model", {"query": query_expr}))
+        return calls
+
+    # --- Pattern 2: JSON tool call with structured args (no "query" field) ---
+    # Models often output: {"name": "query_model", "arguments": {"model_name": "sessions",
+    #   "group_by": ["traffic_source"], "aggregate": ["session_revenue"]}}
+    # Reconstruct a BSL expression from these structured args.
+    if '"query_model"' in stripped and '"model_name"' in stripped:
+        mn_match = re.search(r'"model_name"\s*:\s*"(\w+)"', stripped)
+        if mn_match and mn_match.group(1) in model_names:
+            model = mn_match.group(1)
+            expr = _reconstruct_bsl_expression(model, stripped)
+            if expr:
+                calls.append(("query_model", {"query": expr}))
+                return calls
+
+    # --- Pattern 3: JSON tool call for get_model / list_models ---
+    name_match = re.search(r'"name"\s*:\s*"(get_model|list_models)"', stripped)
+    if name_match:
+        tool_name = name_match.group(1)
+        if tool_name == "get_model":
+            mn_match = re.search(r'"model_name"\s*:\s*"(\w+)"', stripped)
+            if mn_match:
+                calls.append(("get_model", {"model_name": mn_match.group(1)}))
+                return calls
+        else:
+            calls.append(("list_models", {}))
+            return calls
+
+    # --- Pattern 4: BSL expression in code blocks or inline ---
+    # e.g., sessions.group_by("traffic_source").aggregate("session_revenue")
+    for name in model_names:
+        pattern = rf'({re.escape(name)}\.\w+\([\s\S]*?\)(?:\.\w+\([\s\S]*?\))*)'
+        for match in re.finditer(pattern, stripped):
+            expr = match.group(1).strip()
+            if any(kw in expr for kw in ("group_by", "aggregate", "filter", "with_dimensions", "with_measures")):
+                calls.append(("query_model", {"query": expr}))
+                return calls
+
+    # --- Pattern 5: Simple single-line fallback ---
+    for line in stripped.split("\n"):
+        line = line.strip().strip("`")
+        for name in model_names:
+            if line.startswith(name + ".") and (
+                "group_by" in line or "aggregate" in line or "filter" in line
+            ):
+                calls.append(("query_model", {"query": line}))
+                return calls
+
+    return calls
+
+
+def _reconstruct_bsl_expression(model_name: str, text: str) -> str:
+    """Reconstruct a BSL query expression from structured JSON args.
+
+    When the LLM outputs a tool call with model_name/group_by/aggregate fields
+    instead of a query string, this builds the equivalent BSL expression.
+    """
+    def _extract_string_list(key: str) -> list[str]:
+        """Extract a JSON array of strings for the given key."""
+        pattern = rf'"{key}"\s*:\s*\[(.*?)\]'
+        match = re.search(pattern, text, re.DOTALL)
+        if not match:
+            return []
+        items = re.findall(r'"([^"]+)"', match.group(1))
+        return items
+
+    def _clean_measure(m: str) -> str:
+        """Strip aggregate wrappers: sum(revenue) → revenue."""
+        agg_match = re.match(r'(?:sum|avg|count|min|max|count_distinct)\((\w+)\)', m, re.IGNORECASE)
+        return agg_match.group(1) if agg_match else m
+
+    group_by = _extract_string_list("group_by")
+    aggregate = [_clean_measure(m) for m in _extract_string_list("aggregate")]
+    measures = [_clean_measure(m) for m in _extract_string_list("with_measures")]
+
+    # Use aggregate if present, fall back to with_measures
+    agg_fields = aggregate or measures
+    if not group_by or not agg_fields:
+        return ""
+
+    dims_str = ", ".join(f"'{d}'" for d in group_by)
+    agg_str = ", ".join(f"'{m}'" for m in agg_fields)
+    return f"{model_name}.group_by({dims_str}).aggregate({agg_str})"
+
+
 def _run_agent_loop(
     question: str,
     bsl_tools: GATABSLTools,
@@ -243,6 +423,10 @@ def _run_agent_loop(
     BSLTools' execute() returns JSON strings. For query_model, the JSON
     contains {records, chart: {data: <echarts_option>}, total_rows}.
     We parse this to extract records and chart_spec for the response.
+
+    Includes a text-based fallback: when the LLM outputs tool calls as
+    prose instead of structured calls (common with smaller Ollama models),
+    we parse the text for BSL expressions and execute them manually.
     """
     start = time.time()
     response = AgentResponse(provider="llm")
@@ -250,6 +434,7 @@ def _run_agent_loop(
     system_prompt = _build_system_prompt(tenant_slug, bsl_tools.models, semantic_context)
     lc_tools = bsl_tools.get_callable_tools()
     llm_with_tools = llm.bind_tools(lc_tools)
+    known_model_names = list(bsl_tools.models.keys())
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -261,11 +446,31 @@ def _run_agent_loop(
         ai_message = llm_with_tools.invoke(messages)
         messages.append(ai_message)
 
-        if not ai_message.tool_calls:
+        tool_calls = ai_message.tool_calls or []
+
+        # --- Fallback: parse text for tool calls when structured calling fails ---
+        if not tool_calls and ai_message.content:
+            text_calls = _try_extract_text_tool_calls(ai_message.content, known_model_names)
+            if text_calls:
+                logger.info(
+                    f"[BSL Agent] Recovered {len(text_calls)} tool call(s) from text "
+                    f"(model didn't use structured calling)"
+                )
+                # Convert to the same format as structured tool_calls
+                tool_calls = [
+                    {
+                        "name": name,
+                        "args": args,
+                        "id": f"text_{uuid.uuid4().hex[:8]}",
+                    }
+                    for name, args in text_calls
+                ]
+
+        if not tool_calls:
             response.answer = ai_message.content
             break
 
-        for tool_call in ai_message.tool_calls:
+        for tool_call in tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             response.tool_calls.append(f"{tool_name}({json.dumps(tool_args)})")

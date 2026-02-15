@@ -232,9 +232,14 @@ export default function CustomDataDashboard({
       const records = askResponse.records || [];
       let resultChart: ChartConfig | null = null;
 
-      // Use ECharts spec from BSL if available
+      // Use ECharts spec from BSL if available — convert to ChartConfig for Chart.js
       if (askResponse.chart_spec) {
         setEchartsSpec(askResponse.chart_spec);
+        const converted = echartsSpecToChartConfig(askResponse.chart_spec);
+        if (converted) {
+          resultChart = converted;
+          setChartConfig(converted);
+        }
       } else if (records.length > 0 && records.length > 1) {
         // Generate chart from records
         const columns = Object.keys(records[0]);
@@ -461,8 +466,8 @@ export default function CustomDataDashboard({
                         {chartConfig
                           ? <FreshChartsWrapper config={chartConfig} height={320} />
                           : echartsSpec && (
-                            <div class="text-gata-cream/50 text-xs font-mono p-4 bg-gata-dark/40 rounded-lg overflow-auto max-h-80">
-                              <pre>{JSON.stringify(echartsSpec, null, 2)}</pre>
+                            <div class="text-gata-cream/40 text-xs p-4 bg-gata-dark/40 rounded-lg text-center">
+                              <p>Chart data received but could not be rendered.</p>
                             </div>
                           )
                         }
@@ -713,6 +718,84 @@ async function fetchPoPMetrics(
   } catch (err) {
     console.error("PoP fetch failed:", err);
     return [];
+  }
+}
+
+
+// --- ECharts → ChartConfig converter ---
+
+function echartsSpecToChartConfig(spec: Record<string, unknown>): ChartConfig | null {
+  try {
+    // deno-lint-ignore no-explicit-any
+    const xAxisData: string[] = (spec.xAxis as any)?.data || [];
+    // deno-lint-ignore no-explicit-any
+    const series: any[] = (spec.series as any[]) || [];
+    // deno-lint-ignore no-explicit-any
+    const titleText: string = (spec.title as any)?.text || "Analysis";
+
+    if (xAxisData.length === 0 || series.length === 0) return null;
+
+    // Map ECharts type → ChartConfig type
+    const eType = series[0]?.type || "bar";
+    let chartType: ChartConfig["type"] = "bar";
+    if (eType === "line") chartType = "line";
+    else if (eType === "scatter") chartType = "line";
+
+    const xKey = "category";
+    const yKeys = series.map(
+      // deno-lint-ignore no-explicit-any
+      (s: any, idx: number) => s.name || `series_${idx}`,
+    );
+
+    // Build row-per-label data array
+    // deno-lint-ignore no-explicit-any
+    const data: Record<string, any>[] = xAxisData.map((label, i) => {
+      // deno-lint-ignore no-explicit-any
+      const row: Record<string, any> = { [xKey]: label };
+      // deno-lint-ignore no-explicit-any
+      for (const s of series) {
+        const key = s.name || `series_${series.indexOf(s)}`;
+        row[key] = s.data?.[i] ?? 0;
+      }
+      return row;
+    });
+
+    // Infer value format from measure names
+    // deno-lint-ignore no-explicit-any
+    const format: Record<string, any> = {};
+    for (const key of yKeys) {
+      const lower = key.toLowerCase();
+      if (
+        lower.includes("revenue") || lower.includes("spend") ||
+        lower.includes("cost") || lower.includes("price")
+      ) {
+        format[key] = { type: "currency", decimals: 2 };
+      } else if (
+        lower.includes("rate") || lower.includes("percent") ||
+        lower.includes("ctr") || lower.includes("cpc")
+      ) {
+        format[key] = { type: "percentage", decimals: 1 };
+      } else {
+        format[key] = { type: "number", decimals: 0 };
+      }
+    }
+
+    return {
+      type: chartType,
+      title: titleText,
+      xKey,
+      yKeys,
+      data,
+      config: {
+        showLegend: yKeys.length > 1,
+        showGrid: true,
+        showTooltip: true,
+        format,
+      },
+    };
+  } catch (e) {
+    console.error("ECharts → ChartConfig conversion failed:", e);
+    return null;
   }
 }
 

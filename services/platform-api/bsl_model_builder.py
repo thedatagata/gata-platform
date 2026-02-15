@@ -269,7 +269,9 @@ def _auto_infer_calculated_measures(columns_by_subject: dict) -> dict:
     return result
 
 
-# Columns to exclude from join detection (too common, not meaningful as join keys)
+# Columns to exclude from join detection AND dimension tables' BSL configs.
+# These are infrastructure columns present in every table — they cause Ibis
+# name collisions when multiple tables are joined (source_platform_right, etc.).
 _JOIN_EXCLUDE_COLUMNS = {"tenant_slug", "source_platform"}
 
 
@@ -482,6 +484,35 @@ def _build_column_metadata(
 
             columns[col_name] = col_meta
 
+            # Add derived _date metadata for epoch timestamp dimensions
+            if (
+                col.get("is_time_dimension")
+                and col.get("bsl_type") == "timestamp_epoch"
+            ):
+                date_name = col_name.replace("_ts", "_date").replace("_timestamp", "_date")
+                if date_name == col_name:
+                    date_name = col_name + "_date"
+                columns[date_name] = {
+                    "bsl_type": "date",
+                    "role": "dimension",
+                    "is_time_dimension": True,
+                }
+
+        # Add count-distinct measures for key ID dimensions on fact tables
+        if table_type == "fact":
+            for col in entry["columns"]:
+                cn = col["column_name"]
+                if cn.endswith("_id") and col["data_type"] == "VARCHAR" and cn not in _JOIN_EXCLUDE_COLUMNS:
+                    base = cn.replace("_id", "")
+                    count_name = f"total_{base}s" if not base.endswith("s") else f"total_{base}"
+                    if count_name not in columns:
+                        columns[count_name] = {
+                            "bsl_type": "number",
+                            "role": "measure",
+                            "is_time_dimension": False,
+                            "agg": "count_distinct",
+                        }
+
         # Calculated measures: auto-inferred, then YAML overrides
         calc_measures = auto_calc_measures.get(subject, [])
         yaml_calcs = enrich.get("calculated_measures", [])
@@ -627,6 +658,7 @@ def _generate_bsl_config(
     for entry in catalog:
         table_name = entry["table_name"]
         subject = entry["subject"]
+        table_type = entry["table_type"]
         columns = entry["columns"]
 
         enrich = enrichments.get(table_name, {})
@@ -647,6 +679,11 @@ def _generate_bsl_config(
             role = _classify_column(col_name, data_type)
 
             if role == "skip":
+                continue
+
+            # Skip infrastructure columns on dimension tables — they exist in
+            # every table and cause Ibis name collisions when joined to facts
+            if table_type == "dimension" and col_name in _JOIN_EXCLUDE_COLUMNS:
                 continue
 
             # --- YAML override check ---
@@ -679,6 +716,18 @@ def _generate_bsl_config(
                         "expr": f"_.{col_name}",
                         "is_time_dimension": True,
                     }
+                    # Add derived _date dimension for epoch timestamps so the
+                    # LLM can group by DATE instead of raw microsecond values.
+                    # The actual column is added to the Ibis table via mutate()
+                    # in step 8 — here we just register it as a dimension.
+                    if _is_epoch_timestamp(col_name, data_type):
+                        date_name = col_name.replace("_ts", "_date").replace("_timestamp", "_date")
+                        if date_name == col_name:
+                            date_name = col_name + "_date"
+                        model_config["dimensions"][date_name] = {
+                            "expr": f"_.{date_name}",
+                            "is_time_dimension": True,
+                        }
                 else:
                     # Plain string format — no metadata needed
                     model_config["dimensions"][col_name] = f"_.{col_name}"
@@ -686,6 +735,18 @@ def _generate_bsl_config(
                 agg = _infer_aggregation(col_name, data_type)
                 # Plain string format
                 model_config["measures"][col_name] = _ibis_agg_expr(col_name, agg)
+
+        # Auto-add count measures for key ID dimensions on fact tables.
+        # e.g. session_id → total_sessions, order_id → total_orders
+        if table_type == "fact":
+            for col in columns:
+                cn = col["column_name"]
+                if cn.endswith("_id") and col["data_type"] == "VARCHAR" and cn not in _JOIN_EXCLUDE_COLUMNS:
+                    # Derive a natural count measure name
+                    base = cn.replace("_id", "")
+                    count_name = f"total_{base}s" if not base.endswith("s") else f"total_{base}"
+                    if count_name not in model_config["measures"]:
+                        model_config["measures"][count_name] = f"_.{cn}.nunique()"
 
         # NOTE: Calculated measures (CTR, CPC, AOV, etc.) use ibis.ifelse()
         # which requires `ibis` in the eval context. BSL's from_config() only
@@ -834,11 +895,36 @@ def create_tenant_semantic_models(
     # The BSL agent injects `ibis` at query time via GATABSLTools._query_model().
 
     # Step 8: Build Ibis table references for from_config()
+    # - Drop infrastructure columns from dim tables (prevent join collisions)
+    # - Mutate epoch timestamp columns to add derived _date columns so BSL
+    #   can resolve date-level grouping dimensions on the physical table.
     tables = {}
     for entry in catalog:
         table_name = entry["table_name"]
         try:
-            tables[table_name] = con.table(table_name)
+            tbl = con.table(table_name)
+            if entry["table_type"] == "dimension":
+                drop_cols = [c for c in _JOIN_EXCLUDE_COLUMNS if c in tbl.columns]
+                if drop_cols:
+                    tbl = tbl.drop(*drop_cols)
+
+            # Add derived date columns for epoch timestamp dimensions.
+            # BSL's compiler resolves group_by dimensions by column name on the
+            # physical Ibis table, so derived expressions in the config alone
+            # don't work — the column must actually exist on the table object.
+            for col in entry["columns"]:
+                if _is_epoch_timestamp(col["column_name"], col["data_type"]):
+                    col_name = col["column_name"]
+                    date_name = col_name.replace("_ts", "_date").replace("_timestamp", "_date")
+                    if date_name == col_name:
+                        date_name = col_name + "_date"
+                    if date_name not in tbl.columns:
+                        tbl = tbl.mutate(
+                            **{date_name: (tbl[col_name] / 1000000).cast("timestamp").date()}
+                        )
+                        logger.info(f"[BSL] Added derived date column: {table_name}.{date_name}")
+
+            tables[table_name] = tbl
             logger.info(f"[BSL] Loaded Ibis table: {table_name}")
         except Exception as e:
             logger.warning(f"[BSL] Could not load table '{table_name}': {e}")
