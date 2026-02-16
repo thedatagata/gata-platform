@@ -84,11 +84,11 @@ export default function CustomDataDashboard({
 
   // Compute chat status message
   const chatStatusMessage = !webllmReady && !backendLLMAvailable
-    ? "WebLLM loading... Backend LLM unavailable -- start Ollama"
+    ? `WebLLM loading... Backend LLM unavailable${backendLLMProvider ? ` (${backendLLMProvider})` : ""}`
     : !webllmReady
       ? "Waiting for WebLLM to load..."
       : !backendLLMAvailable
-        ? "Backend LLM unavailable -- start Ollama"
+        ? `Backend LLM unavailable${backendLLMProvider ? ` (${backendLLMProvider})` : ""}`
         : "";
 
   // Fetch model detail when selection changes
