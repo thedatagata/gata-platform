@@ -1,4 +1,4 @@
-name: Deploy to Render
+name: CI
 on:
   push:
     branches: [master]
@@ -22,11 +22,3 @@ jobs:
         with: { deno-version: v2.x }
       - run: cd app && deno task build
         env: { BUILD_PHASE: "true" }
-
-  deploy:
-    needs: [test-api, test-app]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
-    steps:
-      - run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_APP }}"
-      - run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_API }}"
