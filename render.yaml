@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: dasgata-app
+    name: gata-platform
     runtime: docker
     plan: starter
     region: oregon
@@ -31,7 +31,7 @@ services:
       sizeGB: 1
 
   - type: web
-    name: dasgata-api
+    name: gata-platform-api
     runtime: docker
     plan: standard
     region: oregon
