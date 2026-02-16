@@ -1,61 +1,41 @@
 version: '3.8'
-
 services:
   app:
-    image: denoland/deno:latest
-    container_name: gata_app
-    working_dir: /app
-    volumes:
-      - ./services/gata-frontend:/app
-      - ./.env:/app/.env
-    command: task start
+    build: { context: ./app, dockerfile: Dockerfile }
+    ports: ["8000:8000"]
     environment:
       - DENO_ENV=development
-    ports:
-      - "8000:8000"
-    networks:
-      - gata-network
+      - PLATFORM_API_URL=http://api:8001
+      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN:-}
+      - SESSION_SECRET=${SESSION_SECRET:-dev-secret}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - BASE_URL=http://localhost:8000
+    volumes: [./app:/app, /app/node_modules, /app/_fresh, kv-data:/app/db]
+    command: deno task start
+    depends_on: [api]
+    networks: [gata-network]
 
   api:
-    build: ./services/platform-api
-    container_name: gata_api
-    ports:
-      - "8001:8000"
-    volumes:
-      - .:/app
+    build: { context: ., dockerfile: services/platform-api/Dockerfile }
+    ports: ["8001:8001"]
     environment:
-      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN}
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
-    networks:
-      - gata-network
-
-  worker:
-    image: python:3.11-slim
-    container_name: gata_worker
-    working_dir: /app
+      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN:-}
+      - BSL_LLM_PROVIDER=${BSL_LLM_PROVIDER:-google}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-2.5-pro}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CORS_ORIGINS=http://localhost:8000
     volumes:
-      - ./:/app
-    command: tail -f /dev/null # Placeholder for manual execution or supervised process
-    env_file:
-      - .env
-    environment:
-      - DLT_PROJECT_DIR=/app/services/mock-data-engine
-    networks:
-      - gata-network
+      - ./tenants.yaml:/app/tenants.yaml
+      - ./services/platform-api:/app/services/platform-api
+    networks: [gata-network]
 
-  dashboard:
-    image: rilldata/rill:latest
-    container_name: gata_rill
-    ports:
-      - "9009:9009"
-    volumes:
-      - ./services/rill-dashboard:/project
-    environment:
-      - MOTHERDUCK_TOKEN=${MOTHERDUCK_TOKEN}
-    command: start /project --host 0.0.0.0
-    networks:
-      - gata-network
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama-models:/root/.ollama]
+    networks: [gata-network]
+    profiles: [ollama]
 
-networks:
-  gata-network:
-    driver: bridge
+volumes: { kv-data: {}, ollama-models: {} }
+networks: { gata-network: { driver: bridge } }

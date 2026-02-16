@@ -1,0 +1,42 @@
+name: dbt Pipeline
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      selector:
+        description: 'dbt selector (e.g. reporting_refresh, tyrell_corp)'
+        required: false
+      full_refresh:
+        description: 'Run safe_full_refresh'
+        type: boolean
+        default: false
+
+jobs:
+  dbt-run:
+    runs-on: ubuntu-latest
+    env:
+      MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv pip install --system dbt-core dbt-duckdb
+      - run: cd warehouse/gata_transformation && dbt deps --target dev
+      - name: Run dbt
+        run: |
+          cd warehouse/gata_transformation
+          if [ "${{ inputs.full_refresh }}" = "true" ]; then
+            dbt run --target dev --full-refresh --selector safe_full_refresh
+          elif [ -n "${{ inputs.selector }}" ]; then
+            dbt run --target dev --selector "${{ inputs.selector }}"
+          else
+            dbt run --target dev
+            dbt run --target dev --selector reporting_refresh
+          fi
+      - run: cd warehouse/gata_transformation && dbt test --target dev
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dbt-artifacts-${{ github.run_id }}
+          path: warehouse/gata_transformation/target/run_results.json
+          retention-days: 30

@@ -1,0 +1,56 @@
+envVarGroups:
+  - name: gata-shared
+    envVars:
+      - key: MOTHERDUCK_TOKEN
+        sync: false
+
+services:
+  - type: web
+    name: dasgata-app
+    runtime: docker
+    plan: starter
+    region: oregon
+    branch: master
+    dockerfilePath: ./app/Dockerfile
+    dockerContext: ./app
+    healthCheckPath: /health
+    envVars:
+      - key: DENO_ENV
+        value: production
+      - key: PLATFORM_API_URL
+        value: http://dasgata-api:8001
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - fromGroup: gata-shared
+    disk:
+      name: deno-kv-data
+      mountPath: /app/db
+      sizeGB: 1
+
+  - type: web
+    name: dasgata-api
+    runtime: docker
+    plan: standard
+    region: oregon
+    branch: master
+    dockerfilePath: ./services/platform-api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: BSL_LLM_PROVIDER
+        value: google
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_MODEL
+        value: gemini-2.5-pro
+      - key: CORS_ORIGINS
+        sync: false
+      - fromGroup: gata-shared

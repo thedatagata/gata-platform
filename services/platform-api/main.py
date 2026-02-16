@@ -50,9 +50,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="GATA Platform API", version="0.2.0")
 TENANTS_YAML = Path(__file__).parent.parent.parent / "tenants.yaml"
 
+CORS_ORIGINS = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:8000,http://localhost:8002,http://localhost:3000"
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://localhost:8002", "http://localhost:3000"],
+    allow_origins=[o.strip() for o in CORS_ORIGINS.split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -149,6 +153,15 @@ def _get_bsl_models(tenant_slug: str) -> dict:
     except Exception as e:
         logger.error(f"Failed to build BSL models for {tenant_slug}: {e}")
         raise HTTPException(status_code=500, detail=f"BSL model build failed: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Health Check (Render)
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "gata-platform-api"}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -431,6 +444,8 @@ def get_semantic_config(tenant_slug: str):
 @app.post("/semantic-layer/update")
 async def update_logic(tenant_slug: str, platform: str, logic_payload: dict):
     """Update tenant logic in tenants.yaml and trigger dbt refresh."""
+    if os.environ.get("RENDER"):
+        raise HTTPException(501, "Use the dbt pipeline for production updates")
     with open(TENANTS_YAML, "r") as f:
         config = yaml.safe_load(f)
 

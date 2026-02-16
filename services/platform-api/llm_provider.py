@@ -31,7 +31,10 @@ class LLMProviderConfig:
     ollama_temperature: float = 0.0
     ollama_timeout: int = 120  # seconds — 14B can be slow on CPU
 
-    # Provider selection: "ollama", "anthropic", or "none"
+    # Google Gemini settings
+    google_model: str = "gemini-2.5-pro"
+
+    # Provider selection: "ollama", "google", "anthropic", or "none"
     provider: str = "ollama"
 
     @classmethod
@@ -50,6 +53,9 @@ class LLMProviderConfig:
             ollama_timeout=int(os.environ.get(
                 "OLLAMA_TIMEOUT", "120"
             )),
+            google_model=os.environ.get(
+                "GOOGLE_MODEL", "gemini-2.5-pro"
+            ),
             provider=os.environ.get(
                 "BSL_LLM_PROVIDER", "ollama"
             ),
@@ -128,6 +134,43 @@ def _try_ollama(config: LLMProviderConfig) -> LLMProvider:
         )
 
 
+def _try_google(config: LLMProviderConfig) -> LLMProvider:
+    """Attempt to use Google Gemini (free via Google AI Studio)."""
+    try:
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            return LLMProvider(
+                provider_name="google",
+                error_message="GOOGLE_API_KEY not set",
+            )
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        llm = ChatGoogleGenerativeAI(
+            model=config.google_model,
+            temperature=0,
+            google_api_key=api_key,
+        )
+
+        return LLMProvider(
+            llm=llm,
+            provider_name="google",
+            model_name=config.google_model,
+            is_available=True,
+        )
+
+    except ImportError:
+        return LLMProvider(
+            provider_name="google",
+            error_message="langchain-google-genai not installed",
+        )
+    except Exception as e:
+        return LLMProvider(
+            provider_name="google",
+            error_message=f"Google Gemini unavailable: {e}",
+        )
+
+
 def _try_anthropic(config: LLMProviderConfig) -> LLMProvider:
     """Attempt to use Anthropic Claude (paid fallback)."""
     try:
@@ -168,8 +211,9 @@ def _try_anthropic(config: LLMProviderConfig) -> LLMProvider:
 # Provider resolution chain
 _PROVIDER_CHAIN = {
     "ollama": [_try_ollama],
+    "google": [_try_google],
     "anthropic": [_try_anthropic],
-    "auto": [_try_ollama, _try_anthropic],
+    "auto": [_try_ollama, _try_google, _try_anthropic],
     "none": [],
 }
 

@@ -1,0 +1,32 @@
+name: Deploy to Render
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: cd services/platform-api && uv pip install --system -r pyproject.toml
+      - run: cd services/platform-api && python -m pytest test_query_builder.py -v
+        env: { GATA_ENV: local }
+
+  test-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with: { deno-version: v2.x }
+      - run: cd app && deno task build
+        env: { BUILD_PHASE: "true" }
+
+  deploy:
+    needs: [test-api, test-app]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_APP }}"
+      - run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_API }}"

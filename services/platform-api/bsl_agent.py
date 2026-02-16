@@ -449,8 +449,12 @@ def _run_agent_loop(
         tool_calls = ai_message.tool_calls or []
 
         # --- Fallback: parse text for tool calls when structured calling fails ---
-        if not tool_calls and ai_message.content:
-            text_calls = _try_extract_text_tool_calls(ai_message.content, known_model_names)
+        # Normalize content to str — some providers (Gemini) return a list of parts
+        content_str = ai_message.content
+        if isinstance(content_str, list):
+            content_str = " ".join(str(part) for part in content_str)
+        if not tool_calls and content_str:
+            text_calls = _try_extract_text_tool_calls(content_str, known_model_names)
             if text_calls:
                 logger.info(
                     f"[BSL Agent] Recovered {len(text_calls)} tool call(s) from text "
@@ -467,7 +471,7 @@ def _run_agent_loop(
                 ]
 
         if not tool_calls:
-            response.answer = ai_message.content
+            response.answer = content_str or ""
             break
 
         for tool_call in tool_calls:
