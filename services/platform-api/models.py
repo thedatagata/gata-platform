@@ -159,3 +159,10 @@ class ReadinessStatus(BaseModel):
     status: Literal['starting', 'ingesting', 'modeling', 'cataloging', 'ready', 'error']
     message: str | None = None
     last_dbt_status: str | None = None
+
+
+class OnboardRequest(BaseModel):
+    """Tenant onboarding request from the app."""
+    tenant_slug: str
+    business_name: str
+    sources: dict[str, dict]  # e.g. {"shopify": {"enabled": true}, ...}

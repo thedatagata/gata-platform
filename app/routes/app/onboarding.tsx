@@ -17,8 +17,8 @@ export default function OnboardingPage(props: PageProps) {
 
       <div class="relative z-10 w-full">
          <div class="mb-10 text-center">
-            <div class="inline-block p-2 border border-gata-green/20 rounded-2xl bg-gata-dark/50 backdrop-blur-md mb-4">
-               <img src="/logo.png" class="h-8 w-auto mix-blend-screen opacity-80" alt="GATA" />
+            <div class="inline-block px-4 py-2 border border-gata-green/20 rounded-2xl bg-gata-dark/50 backdrop-blur-md mb-4">
+               <span class="text-gata-green font-black text-xl tracking-[0.3em] uppercase">DATA_GATA</span>
             </div>
          </div>
          <SourceSelector tenantSlug={tenantSlug} companyName={companyName} />

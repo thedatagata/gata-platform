@@ -24,7 +24,7 @@ Endpoints:
     GET  /observability/{tenant}/identity-resolution
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import duckdb
 import os
@@ -39,6 +39,7 @@ from models import (
     ModelSummary, ModelDetail,
     ObservabilitySummary, RunResult, TestResult, IdentityResolutionStats,
     AskRequest, AskResponse, LLMProviderStatus, ReadinessStatus,
+    OnboardRequest,
 )
 from query_builder import QueryBuilder
 from bsl_agent import ask as bsl_ask
@@ -271,6 +272,73 @@ def check_readiness(tenant_slug: str):
             status="error",
             message=str(e),
         )
+
+
+# ═══════════════════════════════════════════════════════════
+# Tenant Onboarding Endpoint
+# ═══════════════════════════════════════════════════════════
+
+@app.post("/onboard")
+async def onboard_tenant(request: OnboardRequest, background_tasks: BackgroundTasks):
+    """Register a new tenant and kick off the onboarding pipeline.
+
+    1. Writes tenant config to tenants.yaml
+    2. Launches mock data generation + dbt pipeline in background
+    3. Returns immediately — frontend polls /readiness/{slug} for status
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    tenant_slug = request.tenant_slug
+    business_name = request.business_name
+    sources = request.sources
+
+    # 1. Update tenants.yaml with the new tenant
+    tenants_path = _Path(__file__).parent.parent.parent / "tenants.yaml"
+    with open(tenants_path) as f:
+        config = yaml.safe_load(f) or {"tenants": []}
+
+    existing = next((t for t in config["tenants"] if t["slug"] == tenant_slug), None)
+    if existing:
+        existing["sources"] = sources
+        existing["business_name"] = business_name
+        logger.info(f"[ONBOARD] Updated existing tenant: {tenant_slug}")
+    else:
+        config["tenants"].append({
+            "slug": tenant_slug,
+            "business_name": business_name,
+            "status": "onboarding",
+            "sources": sources,
+        })
+        logger.info(f"[ONBOARD] Registered new tenant: {tenant_slug}")
+
+    with open(tenants_path, "w") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    # 2. Launch onboarding pipeline in background
+    project_root = _Path(__file__).parent.parent.parent
+    sys.path.insert(0, str(project_root / "scripts"))
+    sys.path.insert(0, str(project_root / "services" / "mock-data-engine"))
+
+    from onboard_tenant import onboard as run_onboard
+
+    def _run_pipeline():
+        try:
+            exit_code = run_onboard(tenant_slug, target="dev", days=180)
+            if exit_code == 0:
+                logger.info(f"[ONBOARD] Pipeline completed for {tenant_slug}")
+            else:
+                logger.error(f"[ONBOARD] Pipeline failed for {tenant_slug} (exit {exit_code})")
+        except Exception as e:
+            logger.error(f"[ONBOARD] Pipeline error for {tenant_slug}: {e}")
+
+    background_tasks.add_task(_run_pipeline)
+
+    return {
+        "success": True,
+        "tenant_slug": tenant_slug,
+        "message": f"Onboarding pipeline started for {tenant_slug}",
+    }
 
 
 # ═══════════════════════════════════════════════════════════

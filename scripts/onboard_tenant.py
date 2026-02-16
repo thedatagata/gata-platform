@@ -810,10 +810,14 @@ def update_dbt_project_yml(tenant_slug, enabled_sources):
 
 def run_dbt_pipeline(target='dev'):
     """Run dbt full pipeline + reporting refresh."""
-    dbt_base = ["uv", "run"]
-    if target not in ('sandbox', 'local'):
-        dbt_base += ["--env-file", "../../.env"]
-    dbt_base.append("dbt")
+    if os.environ.get("RENDER"):
+        # In Docker on Render: dbt is installed system-wide, env vars set by container
+        dbt_base = ["dbt"]
+    else:
+        dbt_base = ["uv", "run"]
+        if target not in ('sandbox', 'local'):
+            dbt_base += ["--env-file", "../../.env"]
+        dbt_base.append("dbt")
 
     # Full pipeline
     print(f"  [RUN] dbt run --target {target}")
