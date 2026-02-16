@@ -1,9 +1,3 @@
-envVarGroups:
-  - name: gata-shared
-    envVars:
-      - key: MOTHERDUCK_TOKEN
-        sync: false
-
 services:
   - type: web
     name: dasgata-app
@@ -18,7 +12,9 @@ services:
       - key: DENO_ENV
         value: production
       - key: PLATFORM_API_URL
-        value: http://dasgata-api:8001
+        sync: false
+      - key: MOTHERDUCK_TOKEN
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: ADMIN_EMAIL
@@ -29,7 +25,6 @@ services:
         sync: false
       - key: BASE_URL
         sync: false
-      - fromGroup: gata-shared
     disk:
       name: deno-kv-data
       mountPath: /app/db
@@ -51,6 +46,7 @@ services:
         sync: false
       - key: GOOGLE_MODEL
         value: gemini-2.5-pro
+      - key: MOTHERDUCK_TOKEN
+        sync: false
       - key: CORS_ORIGINS
         sync: false
-      - fromGroup: gata-shared
