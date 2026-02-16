@@ -33,7 +33,7 @@ services:
   - type: web
     name: gata-platform-api
     runtime: docker
-    plan: standard
+    plan: starter
     region: oregon
     branch: master
     dockerfilePath: ./services/platform-api/Dockerfile
