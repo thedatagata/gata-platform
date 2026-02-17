@@ -72,17 +72,28 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
     };
   }, [isProvisioning, tenantSlug, retryModelLoad]);
 
-  // Load models on mount
+  // Check readiness first, then load models only when pipeline is done
   useEffect(() => {
     if (!tenantSlug || availableModels.length > 0 || modelsLoading || modelsError || isProvisioning) return;
 
     setModelsLoading(true);
     const client = createPlatformAPIClient();
-    client.getModels(tenantSlug).then(models => {
-      setAvailableModels(models);
-      setModelsLoading(false);
+
+    // Check readiness before attempting to load models
+    client.checkReadiness(tenantSlug).then(status => {
+      if (!status.is_ready) {
+        // Pipeline still building — go straight to provisioning (no 404 errors)
+        setModelsLoading(false);
+        setIsProvisioning(true);
+        setProvisioningStatus(status);
+        return;
+      }
+      // Pipeline ready — safe to load models
+      return client.getModels(tenantSlug).then(models => {
+        setAvailableModels(models);
+        setModelsLoading(false);
+      });
     }).catch(err => {
-      console.error("Failed to load models:", err);
       const msg = (err as Error).message || "";
       setModelsLoading(false);
       if (msg.includes("No star schema tables") || msg.includes("Run dbt first") || msg.includes("bsl_column_catalog")) {
