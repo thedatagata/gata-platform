@@ -18,8 +18,9 @@ COPY scripts/ scripts/
 COPY services/mock-data-engine/ services/mock-data-engine/
 COPY warehouse/gata_transformation/ warehouse/gata_transformation/
 
-# dbt needs profiles.yml in ~/.dbt/
+# dbt needs profiles.yml in ~/.dbt/ and packages installed
 RUN mkdir -p /root/.dbt && cp /app/warehouse/gata_transformation/profiles.yml /root/.dbt/profiles.yml
+RUN cd /app/warehouse/gata_transformation && dbt deps
 
 WORKDIR /app/services/platform-api
 EXPOSE 8001
