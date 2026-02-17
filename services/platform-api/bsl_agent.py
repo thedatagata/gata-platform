@@ -471,7 +471,11 @@ def _run_agent_loop(
                 ]
 
         if not tool_calls:
-            response.answer = content_str or ""
+            # Strip JSON code blocks from the answer — Gemini often embeds
+            # raw data in its final response which the frontend shows as text.
+            clean = re.sub(r"```json\s*\{[\s\S]*?\}\s*```", "", content_str or "")
+            clean = re.sub(r"```\s*\{[\s\S]*?\}\s*```", "", clean)
+            response.answer = clean.strip()
             break
 
         for tool_call in tool_calls:

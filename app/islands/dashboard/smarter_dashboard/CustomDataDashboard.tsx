@@ -240,7 +240,8 @@ export default function CustomDataDashboard({
           resultChart = converted;
           setChartConfig(converted);
         }
-      } else if (records.length > 0 && records.length > 1) {
+      }
+      if (!resultChart && records.length > 1) {
         // Generate chart from records
         const columns = Object.keys(records[0]);
         const dims = columns.filter(c => typeof records[0][c] === "string");
