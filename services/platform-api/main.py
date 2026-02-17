@@ -87,6 +87,30 @@ def _get_query_builder(tenant_slug: str) -> QueryBuilder:
     if config_path.exists():
         with open(config_path) as f:
             config = yaml.safe_load(f)
+
+        # Merge auto-count measures from metadata into YAML config so that
+        # model detail and QueryBuilder stay in sync.
+        _get_bsl_models(tenant_slug)  # ensure metadata is populated
+        metadata = get_tenant_metadata(tenant_slug)
+        if metadata:
+            # Build lookup: physical table name → metadata columns
+            table_meta = {m["table"]: m.get("columns", {}) for m in metadata.values()}
+            for model_cfg in config.get("models", []):
+                cols = table_meta.get(model_cfg["name"], {})
+                existing_measure_names = {m["name"] for m in model_cfg.get("measures", [])}
+                for col_name, info in cols.items():
+                    if (
+                        info.get("role") == "measure"
+                        and "source_column" in info
+                        and col_name not in existing_measure_names
+                    ):
+                        model_cfg.setdefault("measures", []).append({
+                            "name": col_name,
+                            "type": info.get("bsl_type", "number"),
+                            "agg": info.get("agg", "count_distinct"),
+                            "source_column": info["source_column"],
+                        })
+
         return QueryBuilder(config)
 
     # Auto-generate from BSL metadata (no YAML needed)
@@ -109,7 +133,12 @@ def _get_query_builder(tenant_slug: str) -> QueryBuilder:
             if info.get("role") == "dimension"
         ]
         measures = [
-            {"name": col_name, "type": info.get("bsl_type", "number"), "agg": info.get("agg", "sum")}
+            {
+                "name": col_name,
+                "type": info.get("bsl_type", "number"),
+                "agg": info.get("agg", "sum"),
+                **({"source_column": info["source_column"]} if "source_column" in info else {}),
+            }
             for col_name, info in columns.items()
             if info.get("role") == "measure"
         ]

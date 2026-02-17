@@ -520,6 +520,7 @@ def _build_column_metadata(
                             "role": "measure",
                             "is_time_dimension": False,
                             "agg": "count_distinct",
+                            "source_column": cn,
                         }
 
         # Calculated measures: auto-inferred, then YAML overrides

@@ -21,6 +21,7 @@ export interface MeasureDef {
   type: string;
   agg: string;
   label?: string;
+  source_column?: string;
 }
 
 export interface CalculatedMeasureDef {

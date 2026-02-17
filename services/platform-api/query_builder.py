@@ -49,7 +49,8 @@ class QueryBuilder:
         for m in request.measures:
             mc = measure_config[m]
             agg = mc.get("agg", "sum")
-            col_ref = f"{prefix}{m}"
+            source_col = mc.get("source_column", m)
+            col_ref = f"{prefix}{source_col}"
             if agg == "count_distinct":
                 select_parts.append(f"COUNT(DISTINCT {col_ref}) AS {m}")
             elif agg == "count":
