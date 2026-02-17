@@ -808,10 +808,9 @@ def update_dbt_project_yml(tenant_slug, enabled_sources):
 # PHASE 3: Run dbt pipeline
 # ═══════════════════════════════════════════════════════════════
 
-def run_dbt_pipeline(target='dev'):
-    """Run dbt full pipeline + reporting refresh."""
+def run_dbt_pipeline(target='dev', tenant_slug=None):
+    """Run dbt pipeline, optionally scoped to a single tenant."""
     if os.environ.get("RENDER"):
-        # In Docker on Render: dbt is installed system-wide, env vars set by container
         dbt_base = ["dbt"]
     else:
         dbt_base = ["uv", "run"]
@@ -819,20 +818,45 @@ def run_dbt_pipeline(target='dev'):
             dbt_base += ["--env-file", "../../.env"]
         dbt_base.append("dbt")
 
-    # Full pipeline
-    print(f"  [RUN] dbt run --target {target}")
+    if tenant_slug:
+        # Scoped run: only this tenant's models + shared infrastructure
+        select = [
+            "--select",
+            "path:models/platform/master_models",
+            f"path:models/staging/{tenant_slug}",
+            f"path:models/intermediate/{tenant_slug}",
+            f"path:models/analytics/{tenant_slug}",
+            "path:models/platform/ops",
+        ]
+        label = f" (tenant: {tenant_slug})"
+    else:
+        select = []
+        label = ""
+
+    # Pipeline run
+    print(f"  [RUN] dbt run --target {target}{label}")
     result = subprocess.run(
-        [*dbt_base, "run", "--target", target],
+        [*dbt_base, "run", "--target", target, *select],
         cwd=str(DBT_PROJECT_DIR),
     )
     print(f"  [{'OK' if result.returncode == 0 else 'FAIL'}] Full run (exit {result.returncode})")
     if result.returncode != 0:
         return result.returncode
 
-    # Reporting refresh (second pass)
-    print(f"  [RUN] dbt run --target {target} --selector reporting_refresh")
+    # Reporting refresh (second pass — data flows through after staging MERGEs)
+    if tenant_slug:
+        refresh_select = [
+            "--select",
+            f"path:models/intermediate/{tenant_slug}",
+            f"path:models/analytics/{tenant_slug}",
+            "path:models/platform/ops",
+        ]
+    else:
+        refresh_select = ["--selector", "reporting_refresh"]
+
+    print(f"  [RUN] dbt run --target {target} (reporting refresh{label})")
     result = subprocess.run(
-        [*dbt_base, "run", "--target", target, "--selector", "reporting_refresh"],
+        [*dbt_base, "run", "--target", target, *refresh_select],
         cwd=str(DBT_PROJECT_DIR),
     )
     print(f"  [{'OK' if result.returncode == 0 else 'FAIL'}] Reporting refresh (exit {result.returncode})")
@@ -924,7 +948,7 @@ def onboard(tenant_slug, target='dev', days=30, skip_dbt=False):
     print(f"\n{'='*60}")
     print(f"  PHASE 3: Run dbt pipeline (target={target})")
     print(f"{'='*60}")
-    exit_code = run_dbt_pipeline(target)
+    exit_code = run_dbt_pipeline(target, tenant_slug=tenant_slug)
 
     # Phase 4: Activate tenant on success
     if exit_code == 0:
