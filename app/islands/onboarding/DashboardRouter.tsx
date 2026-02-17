@@ -20,7 +20,6 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
 
   // Backend LLM state
   const [backendLLMAvailable, setBackendLLMAvailable] = useState(false);
-  const [backendLLMChecked, setBackendLLMChecked] = useState(false);
   const [backendLLMProvider, setBackendLLMProvider] = useState("");
 
   // Models
@@ -114,7 +113,6 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
       const status = await client.checkBackendLLM();
       setBackendLLMAvailable(status.available);
       setBackendLLMProvider(status.provider);
-      setBackendLLMChecked(true);
     };
 
     checkLLM();
@@ -123,11 +121,9 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
     return () => clearInterval(interval);
   }, [tenantSlug]);
 
-  // Initialize WebLLM only as fallback when no backend LLM is available
+  // Initialize WebLLM in background once models are loaded
   useEffect(() => {
     if (webllmReady || webllmLoading || availableModels.length === 0) return;
-    // Wait for backend LLM check; skip WebLLM if backend handles it
-    if (!backendLLMChecked || backendLLMAvailable) return;
 
     setWebllmLoading(true);
     setWebllmStatus("Loading AI model...");
@@ -152,7 +148,7 @@ export default function DashboardRouter({ tenantSlug }: DashboardRouterProps) {
         setWebllmLoading(false);
       }
     })();
-  }, [availableModels.length, webllmReady, webllmLoading, backendLLMChecked, backendLLMAvailable]);
+  }, [availableModels.length, webllmReady, webllmLoading]);
 
   // No tenant configured
   if (!tenantSlug) {
